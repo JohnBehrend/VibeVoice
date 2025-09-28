@@ -73,7 +73,7 @@ def get_chapter_objs(text: str):
                     next_character = paragraph.split("s' ")[1][0]
                     if  next_character == next_character.lower():
                         paragraph = paragraph.replace("s' "," ")
-                quotes = re.split("[\"']", paragraph)
+                quotes = [x.strip() for x in re.split("[\"']", paragraph)]
                 if paragraph.startswith('"') or paragraph.startswith("'"):
                     quote_en=True
                 else:
@@ -81,23 +81,7 @@ def get_chapter_objs(text: str):
                 for quote in quotes:
                     for i, contraction in enumerate(contractions):
                         quote = quote.replace("CONTRACTION{}".format(i), contraction)
-                    if len(quote)>0:
- 
-                        if quote == " ":
-                            continue
-                        if quote == "\t ":
-                            continue
-                        if quote == " \t":
-                            continue
-                        if quote == "  ":
-                            continue
-                        if quote == "\t  ":
-                            continue
-                        if quote == "   ":
-                            continue
-                        if quote == "\t   ":
-                            continue
- 
+                    if len(quote)>0: 
                         chapter_objs.append(ChapterObj(quote_en, speaker, quote))
                     quote_en = not quote_en
             else:
