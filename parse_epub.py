@@ -8,6 +8,7 @@ import ebooklib
 from ebooklib import epub
 from bs4 import BeautifulSoup
 import sys
+from parse_chapter import get_chapter_objs
 
 def parse_epub_to_chapters(epub_path):
     """
@@ -29,7 +30,12 @@ def parse_epub_to_chapters(epub_path):
                 txt = BeautifulSoup(item.get_content(), 'html.parser').get_text(separator=" ", strip=False)
                 if txt.strip():  # Only add non-empty chapters
                     chapters.append(txt)
-        
+                    chater_objs = parse_chapter(txt)
+                    for chapter_obj in chater_objs:
+                        print(chapter_obj.has_quotes)
+                        print(chapter_obj.speaker)
+                        print(chapter_obj.text)
+                    exit()
         return chapters
     
     except Exception as e:
