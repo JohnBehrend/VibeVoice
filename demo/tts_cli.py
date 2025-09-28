@@ -26,10 +26,10 @@ logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
 
 class VibeVoiceTTS:
-    def __init__(self, model_path: str, device: str = "cuda", inference_steps: int = 5):
+    def __init__(self, model_path: str, inference_steps: int = 5):
         """Initialize the VibeVoice TTS with model loading."""
         self.model_path = model_path
-        self.device = device
+        self.device = "cuda"
         self.inference_steps = inference_steps
         self.load_model()
         self.setup_voice_presets()
@@ -38,57 +38,23 @@ class VibeVoiceTTS:
         """Load the VibeVoice model and processor."""
         print(f"Loading processor & model from {self.model_path}")
         
-        # Normalize potential 'mpx'
-        if self.device.lower() == "mpx":
-            print("Note: device 'mpx' detected, treating it as 'mps'.")
-            self.device = "mps"
-            
-        if self.device == "mps" and not torch.backends.mps.is_available():
-            print("Warning: MPS not available. Falling back to CPU.")
-            self.device = "cpu"
-            
-        print(f"Using device: {self.device}")
-        
         # Load processor
         self.processor = VibeVoiceProcessor.from_pretrained(self.model_path)
         
-        # Decide dtype & attention
-        if self.device == "mps":
-            load_dtype = torch.float32
-            attn_impl_primary = "sdpa"
-        elif self.device == "cuda":
-            load_dtype = torch.bfloat16
-            attn_impl_primary = "flash_attention_2"
-        else:
-            load_dtype = torch.float32
-            attn_impl_primary = "sdpa"
+        # Decide dtype & attention for CUDA
+        load_dtype = torch.bfloat16
+        attn_impl_primary = "flash_attention_2"
             
         print(f"Using device: {self.device}, torch_dtype: {load_dtype}, attn_implementation: {attn_impl_primary}")
         
-        # Load model
+        # Load model for CUDA
         try:
-            if self.device == "mps":
-                self.model = VibeVoiceForConditionalGenerationInference.from_pretrained(
-                    self.model_path,
-                    torch_dtype=load_dtype,
-                    attn_implementation=attn_impl_primary,
-                    device_map=None,
-                )
-                self.model.to("mps")
-            elif self.device == "cuda":
-                self.model = VibeVoiceForConditionalGenerationInference.from_pretrained(
-                    self.model_path,
-                    torch_dtype=load_dtype,
-                    device_map="cuda",
-                    attn_implementation=attn_impl_primary,
-                )
-            else:
-                self.model = VibeVoiceForConditionalGenerationInference.from_pretrained(
-                    self.model_path,
-                    torch_dtype=load_dtype,
-                    device_map="cpu",
-                    attn_implementation=attn_impl_primary,
-                )
+            self.model = VibeVoiceForConditionalGenerationInference.from_pretrained(
+                self.model_path,
+                torch_dtype=load_dtype,
+                device_map="cuda",
+                attn_implementation=attn_impl_primary,
+            )
         except Exception as e:
             if attn_impl_primary == 'flash_attention_2':
                 print(f"[ERROR] : {type(e).__name__}: {e}")
@@ -97,11 +63,9 @@ class VibeVoiceTTS:
                 self.model = VibeVoiceForConditionalGenerationInference.from_pretrained(
                     self.model_path,
                     torch_dtype=load_dtype,
-                    device_map=(self.device if self.device in ("cuda", "cpu") else None),
+                    device_map="cuda",
                     attn_implementation=fallback_attn,
                 )
-                if self.device == "mps":
-                    self.model.to("mps")
             else:
                 raise e
                 
@@ -215,7 +179,7 @@ class VibeVoiceTTS:
         )
         
         # Move tensors to device
-        target_device = self.device if self.device in ("cuda", "mps") else "cpu"
+        target_device = "cuda"
         for k, v in inputs.items():
             if torch.is_tensor(v):
                 inputs[k] = v.to(target_device)
@@ -293,12 +257,6 @@ def parse_args():
         help="Path to the VibeVoice model directory",
     )
     parser.add_argument(
-        "--device",
-        type=str,
-        default=("cuda" if torch.cuda.is_available() else ("mps" if torch.backends.mps.is_available() else "cpu")),
-        help="Device for inference: cuda | mps | cpu",
-    )
-    parser.add_argument(
         "--inference_steps",
         type=int,
         default=10,
@@ -342,7 +300,6 @@ def main():
         # Initialize TTS instance
         tts = VibeVoiceTTS(
             model_path=args.model_path,
-            device=args.device,
             inference_steps=args.inference_steps
         )
         
