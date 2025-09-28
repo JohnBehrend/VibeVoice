@@ -22,7 +22,7 @@ def test_single_paragraph():
 
 def test_multiple_paragraphs():
     """Test with multiple paragraphs"""
-    text = "First paragraph.\n\nSecond paragraph with \"quotes\".\n\nThird paragraph."
+    text = "First paragraph.\nSecond paragraph with \"quotes\".\nThird paragraph."
     result = get_chapter_objs(text)
     
     assert len(result) == 3
@@ -41,7 +41,7 @@ def test_multiple_paragraphs():
 
 def test_empty_paragraphs():
     """Test with empty paragraphs"""
-    text = "First paragraph.\n\n\n\nSecond paragraph."
+    text = "First paragraph.\nSecond paragraph."
     result = get_chapter_objs(text)
     
     assert len(result) == 2

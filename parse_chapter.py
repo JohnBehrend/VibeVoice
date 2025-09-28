@@ -22,8 +22,8 @@ def get_chapter_objs(text: str):
     # For now, set speaker to "narrator" as requested
     speaker = "narrator"
     
-    # Split text into paragraphs (assuming paragraphs are separated by double newlines)
-    paragraphs = text.split('\n\n')
+    # Split text into paragraphs (assuming paragraphs are separated by single newlines)
+    paragraphs = text.split('\n')
     
     # Create a list of ChapterObj for each paragraph
     chapter_objs = []
