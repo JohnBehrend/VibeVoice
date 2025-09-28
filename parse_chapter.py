@@ -3,6 +3,8 @@
 Module to parse chapter content and return chapter objects.
 """
 
+import re
+
 class ChapterObj:
     def __init__(self, has_quotes: bool, speaker: str, text: str):
         self.has_quotes = has_quotes
@@ -35,6 +37,21 @@ def get_chapter_objs(text: str):
         if paragraph.strip():
             # Check if there are quotations in the paragraph
             has_quotes = any(x in paragraph.replace("'s","") for x in ["'",'"'])
-            chapter_objs.append(ChapterObj(has_quotes, speaker, paragraph))
+            
+            # If there are quotes, we need to split the paragraph to separate the quote from the rest
+            if has_quotes:
+                # Find all quoted text in the paragraph
+                # This regex will match both single and double quoted strings
+                quotes = re.split("[\"']", paragraph.replace("'s",'QUOTED_S').replace("'ve","QUOTED_VE"))
+                if paragraph.startswith('"') or paragraph.startswith("'"):
+                    quote_en=True
+                else:
+                    quote_en=False
+                for quote in quotes:
+                    chapter_objs.append(ChapterObj(quote_en, speaker, quote.replace("QUOTED_S","'s").replace("QUOTED_VE","'ve")))
+                    quote_en = not quote_en
+            else:
+                # No quotes, treat as normal paragraph
+                chapter_objs.append(ChapterObj(has_quotes, speaker, paragraph))
     
     return chapter_objs
