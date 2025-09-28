@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!C:\Users\j3p3\Documents\Repos\VibeVoice\.venv\Scripts\python.exe python3
 """
 Command Line Interface for VibeVoice Text-to-Speech
 """
@@ -7,6 +7,7 @@ import argparse
 import os
 import sys
 import torch
+import librosa
 import numpy as np
 import soundfile as sf
 from pathlib import Path
@@ -48,26 +49,11 @@ class VibeVoiceTTS:
         print(f"Using device: {self.device}, torch_dtype: {load_dtype}, attn_implementation: {attn_impl_primary}")
         
         # Load model for CUDA
-        try:
-            self.model = VibeVoiceForConditionalGenerationInference.from_pretrained(
+        self.model = VibeVoiceForConditionalGenerationInference.from_pretrained(
                 self.model_path,
                 torch_dtype=load_dtype,
                 device_map="cuda",
-                attn_implementation=attn_impl_primary,
-            )
-        except Exception as e:
-            if attn_impl_primary == 'flash_attention_2':
-                print(f"[ERROR] : {type(e).__name__}: {e}")
-                print("Falling back to attention implementation: sdpa")
-                fallback_attn = "sdpa"
-                self.model = VibeVoiceForConditionalGenerationInference.from_pretrained(
-                    self.model_path,
-                    torch_dtype=load_dtype,
-                    device_map="cuda",
-                    attn_implementation=fallback_attn,
-                )
-            else:
-                raise e
+                attn_implementation=attn_impl_primary)
                 
         self.model.eval()
         
