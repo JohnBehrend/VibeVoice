@@ -17,7 +17,11 @@ class ChapterObj:
             return 1
 
     def __str__(self):
-        return f"Speaker {self._get_speaker_num()}: |{self.text}|"
+        return f"Speaker {self._get_speaker_num()}: {self.text}"
+    def get_speaker(self):
+        return self.speaker
+    def set_speaker(self, speaker:str):
+        self.speaker = speaker
 
 def get_chapter_objs(text: str):
     """
