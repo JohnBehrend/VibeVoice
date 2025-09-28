@@ -66,7 +66,8 @@ def main():
     # Print each chapter (you can modify this to output in different formats)
     for i, chapter in enumerate(chapters):
         print(f"\n--- Chapter {i+1} ---")
-        for chapter_obj in [x for x in chapter if (x.has_quotes and x.speaker == "narrator")]:
-            print(chapter_obj.text)
+        for j, chapter_obj in enumerate(chapter):
+            if (chapter_obj.has_quotes and chapter_obj.speaker == "narrator"):
+                print(j, chapter_obj.text)
 if __name__ == "__main__":
     main()

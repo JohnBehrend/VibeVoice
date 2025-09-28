@@ -42,13 +42,27 @@ def get_chapter_objs(text: str):
             if has_quotes:
                 # Find all quoted text in the paragraph
                 # This regex will match both single and double quoted strings
-                quotes = re.split("[\"']", paragraph.replace("'s",'QUOTED_S').replace("'ve","QUOTED_VE"))
+                
+                # Fix contractions
+                contraction_pattern = r"\b\w+[']\w+\b"
+                contractions = re.findall(contraction_pattern, paragraph)
+                for i, contraction in enumerate(contractions):
+                    paragraph = paragraph.replace(contraction,"CONTRACTION{}".format(i))
+
+                # Fix plural possesive ending is s followed by lowercase character
+                if "s' " in paragraph:
+                    next_character = paragraph.split("s' ")[1][0]
+                    if  next_character == next_character.lower():
+                        paragraph = paragraph.replace("s' "," ")
+                quotes = re.split("[\"']", paragraph)
                 if paragraph.startswith('"') or paragraph.startswith("'"):
                     quote_en=True
                 else:
                     quote_en=False
                 for quote in quotes:
-                    chapter_objs.append(ChapterObj(quote_en, speaker, quote.replace("QUOTED_S","'s").replace("QUOTED_VE","'ve")))
+                    for i, contraction in enumerate(contractions):
+                        quote = quote.replace("CONTRACTION{}".format(i), contraction)
+                    chapter_objs.append(ChapterObj(quote_en, speaker, quote))
                     quote_en = not quote_en
             else:
                 # No quotes, treat as normal paragraph
