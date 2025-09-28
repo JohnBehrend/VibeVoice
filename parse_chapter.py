@@ -9,6 +9,9 @@ class ChapterObj:
         self.speaker = speaker
         self.text = text
 
+    def __str__(self):
+        return f"Speaker: {self.speaker}\nHas Quotes: {self.has_quotes}\nText: {self.text}"
+
 def get_chapter_objs(text: str):
     """
     Parse a chapter's text and return a list of chapter objects with the required properties.
