@@ -37,6 +37,36 @@ def parse_epub_to_chapters(epub_path):
                     .replace(u"\u201d",'"')
                     .replace(u"\u2018","'")
                     .replace(u"\u2013","-")
+                    # spaces
+                    .replace(u"\u0009","\t") # character tabulation
+                    .replace(u"\u000A","\n") # line feed
+                    .replace(u"\u000B"," ") # line tabulation
+                    .replace(u"\u000C"," ") # form feed
+                    .replace(u"\u000D","\n") # carriage return
+                    .replace(u"\u0020"," ") # space
+                    .replace(u"\u0085","\n") # next line
+                    .replace(u"\u00A0"," ") # no-break space
+                    .replace(u"\u1680"," ") # ogham space mark
+                    .replace(u"\u180E"," ") # mongolian vowel separator
+                    .replace(u"\u2000"," ") # en quad
+                    .replace(u"\u2001"," ") # em quad
+                    .replace(u"\u2002"," ") # en space
+                    .replace(u"\u2004"," ") # three-per-em space
+                    .replace(u"\u2005"," ") # four-per-em space
+                    .replace(u"\u2006"," ") # six-per-em space
+                    .replace(u"\u2007"," ") # figure space
+                    .replace(u"\u2008"," ") # punctuation space
+                    .replace(u"\u2009"," ") # thin space
+                    .replace(u"\u200A"," ") # hair space
+                    .replace(u"\u200B"," ") # zero width space
+                    .replace(u"\u200C"," ") # zero width non-joiner
+                    .replace(u"\u200D"," ") # zero width joiner
+                    .replace(u"\u2028","\n ") # line separator
+                    .replace(u"\u2029","\n\n") # paragraph separator
+                    .replace(u"\u202F"," ") # narrow no-break space
+                    .replace(u"\u205F"," ") # medium mathematical space
+                    .replace(u"\u2060","-") # word joiner
+                    .replace(u"\u3000"," ") # ideographic space
                     .encode('ascii')
                     , 'html.parser').get_text(separator=" ", strip=False)
                 if txt.strip():  # Only add non-empty chapters
@@ -67,7 +97,8 @@ def main():
     for i, chapter in enumerate(chapters):
         print(f"\n--- Chapter {i+1} ---")
         for j, chapter_obj in enumerate(chapter):
-            if (chapter_obj.has_quotes and chapter_obj.speaker == "narrator"):
-                print(j, chapter_obj.text)
+            print(chapter_obj)
+            #if (chapter_obj.has_quotes and chapter_obj.speaker == "narrator"):
+            #    print("Speaker 2:", chapter_obj.text)
 if __name__ == "__main__":
     main()

@@ -9,10 +9,15 @@ class ChapterObj:
     def __init__(self, has_quotes: bool, speaker: str, text: str):
         self.has_quotes = has_quotes
         self.speaker = speaker
-        self.text = text
+        self.text = text.strip()
+    def _get_speaker_num(self):
+        if self.has_quotes:
+            return 2
+        else:
+            return 1
 
     def __str__(self):
-        return f"Speaker: {self.speaker}\nHas Quotes: {self.has_quotes}\nText: {self.text}"
+        return f"Speaker {self._get_speaker_num()}: |{self.text}|"
 
 def get_chapter_objs(text: str):
     """
@@ -35,6 +40,20 @@ def get_chapter_objs(text: str):
     for paragraph in paragraphs:
         # Skip empty paragraphs
         if paragraph.strip():
+            if paragraph == " ":
+                continue
+            if paragraph == "\t ":
+                continue
+            if paragraph == " \t":
+                continue
+            if paragraph == "  ":
+                continue
+            if paragraph == "\t  ":
+                continue
+            if paragraph == "   ":
+                continue
+            if paragraph == "\t   ":
+                continue
             # Check if there are quotations in the paragraph
             has_quotes = any(x in paragraph.replace("'s","") for x in ["'",'"'])
             
@@ -62,7 +81,24 @@ def get_chapter_objs(text: str):
                 for quote in quotes:
                     for i, contraction in enumerate(contractions):
                         quote = quote.replace("CONTRACTION{}".format(i), contraction)
-                    chapter_objs.append(ChapterObj(quote_en, speaker, quote))
+                    if len(quote)>0:
+ 
+                        if quote == " ":
+                            continue
+                        if quote == "\t ":
+                            continue
+                        if quote == " \t":
+                            continue
+                        if quote == "  ":
+                            continue
+                        if quote == "\t  ":
+                            continue
+                        if quote == "   ":
+                            continue
+                        if quote == "\t   ":
+                            continue
+ 
+                        chapter_objs.append(ChapterObj(quote_en, speaker, quote))
                     quote_en = not quote_en
             else:
                 # No quotes, treat as normal paragraph
