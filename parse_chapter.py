@@ -44,38 +44,20 @@ def get_chapter_objs(text: str):
     for paragraph in paragraphs:
         # Skip empty paragraphs
         if paragraph.strip():
-            # Check if there are quotations in the paragraph
-            has_quotes = any(x in paragraph.replace("'s","") for x in ["'",'"'])
-            
             # If there are quotes, we need to split the paragraph to separate the quote from the rest
-            if has_quotes:
+            if '"' in paragraph:
                 # Find all quoted text in the paragraph
-                # This regex will match both single and double quoted strings
-                
-                # Fix contractions
-                contraction_pattern = r"\b\w+[']\w+\b"
-                contractions = re.findall(contraction_pattern, paragraph)
-                for i, contraction in enumerate(contractions):
-                    paragraph = paragraph.replace(contraction,"CONTRACTION{}".format(i))
-
-                # Fix plural possesive ending is s followed by lowercase character
-                if "s' " in paragraph:
-                    next_character = paragraph.split("s' ")[1][0]
-                    if  next_character == next_character.lower():
-                        paragraph = paragraph.replace("s' "," ")
-                quotes = [x.strip() for x in re.split("[\"']", paragraph)]
-                if paragraph.startswith('"') or paragraph.startswith("'"):
+                quotes = [x.strip() for x in paragraph.split('"')]
+                if paragraph.startswith('"'):# or paragraph.startswith("'"):
                     quote_en=True
                 else:
                     quote_en=False
                 for quote in quotes:
-                    for i, contraction in enumerate(contractions):
-                        quote = quote.replace("CONTRACTION{}".format(i), contraction)
                     if len(quote)>0: 
                         chapter_objs.append(ChapterObj(quote_en, speaker, quote))
                     quote_en = not quote_en
             else:
                 # No quotes, treat as normal paragraph
-                chapter_objs.append(ChapterObj(has_quotes, speaker, paragraph))
+                chapter_objs.append(ChapterObj(False, speaker, paragraph))
     
     return chapter_objs

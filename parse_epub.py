@@ -91,13 +91,43 @@ def main():
         sys.exit(1)
     
     # Print the number of chapters found
-    print(f"Found {len(chapters)} chapters")
+    # print(f"Found {len(chapters)} chapters")
     
+    # try to find characters that have quotes.
+    #valid_speakers = {}
+    previous_valid_speaker=None
+    valid_context = []
+    for i, chapter in enumerate(chapters):
+        print(f"CHAPTER{i}")
+        was_quote = False
+        for j, chapter_obj in enumerate(chapter):
+            if chapter_obj.has_quotes is False and was_quote is True:
+                toks = chapter_obj.text.split(" ")
+                if len(toks)>=2:
+                    speaker, context = toks[:2]
+                    if context in valid_context: # change speaker if we have good context
+                        chapter[j-1].set_speaker(speaker)
+                        print(speaker, '\n', chapter[j-1].text, '\n', chapter[j].text)
+                    elif previous_valid_speaker is not None:
+                        chapter[j-1].set_speaker(previous_valid_speaker)
+                        print(speaker," INVALID context ", context, " using previous valid ", previous_valid_speaker, '\n', chapter[j-1].text, '\n', chapter[j].text)
+                else: # not enough context keep same speaker
+                    chapter[j-1].set_speaker(previous_valid_speaker)
+                    print("NOT ENOUGH CONTEXT, SINGLE:","\n", chapter[j-1].text,"\n", chapter[j])
+                #if speaker in valid_speakers.keys():
+                #    valid_speakers[speaker]+=1
+                #else:
+                #    valid_speakers[speaker]=1
+            if chapter_obj.has_quotes:
+                was_quote = True
+            else:
+                was_quote = False
+    #print("\n".join([str(x) for x in sorted(speaker_counts.items(), key=lambda x: x[1], reverse=True)]))
     # Print each chapter (you can modify this to output in different formats)
     for i, chapter in enumerate(chapters):
-        print(f"\n--- Chapter {i+1} ---")
+        #print(f"\n--- Chapter {i+1} ---")
         for j, chapter_obj in enumerate(chapter):
-            print(chapter_obj)
+            pass#print(chapter_obj)
             #if (chapter_obj.has_quotes and chapter_obj.speaker == "narrator"):
             #    print("Speaker 2:", chapter_obj.text)
 if __name__ == "__main__":
