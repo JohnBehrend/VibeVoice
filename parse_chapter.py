@@ -40,20 +40,6 @@ def get_chapter_objs(text: str):
     for paragraph in paragraphs:
         # Skip empty paragraphs
         if paragraph.strip():
-            if paragraph == " ":
-                continue
-            if paragraph == "\t ":
-                continue
-            if paragraph == " \t":
-                continue
-            if paragraph == "  ":
-                continue
-            if paragraph == "\t  ":
-                continue
-            if paragraph == "   ":
-                continue
-            if paragraph == "\t   ":
-                continue
             # Check if there are quotations in the paragraph
             has_quotes = any(x in paragraph.replace("'s","") for x in ["'",'"'])
             
