@@ -30,8 +30,8 @@ def parse_epub_to_chapters(epub_path):
                 txt = BeautifulSoup(item.get_content(), 'html.parser').get_text(separator=" ", strip=False)
                 if txt.strip():  # Only add non-empty chapters
                     chapters.append(txt)
-                    chater_objs = parse_chapter(txt)
-                    for chapter_obj in chater_objs:
+                    chapter_objs = get_chapter_objs(txt)
+                    for chapter_obj in chapter_objs:
                         print(chapter_obj.has_quotes)
                         print(chapter_obj.speaker)
                         print(chapter_obj.text)
