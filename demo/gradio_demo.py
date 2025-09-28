@@ -17,9 +17,10 @@ import gradio as gr
 import librosa
 import soundfile as sf
 import torch
-import os
 import traceback
-
+import sys
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+print(sys.path)
 from vibevoice.modular.configuration_vibevoice import VibeVoiceConfig
 from vibevoice.modular.modeling_vibevoice_inference import VibeVoiceForConditionalGenerationInference
 from vibevoice.processor.vibevoice_processor import VibeVoiceProcessor
@@ -1202,7 +1203,7 @@ def parse_args():
     parser.add_argument(
         "--model_path",
         type=str,
-        default="/tmp/vibevoice-model",
+        default="Jmica/VibeVoice7B",
         help="Path to the VibeVoice model directory",
     )
     parser.add_argument(

@@ -35,6 +35,8 @@ dependencies = [
     "setuptools>=80.9.0",
     "flash-attn",
     "triton-windows<3.4",
+    "ebooklib>=0.19",
+    "beautifulsoup4>=4.13.5",
 ]
 
 
@@ -69,3 +71,8 @@ flash-attn = { path = "flash_attn-2.7.4+cu128torch2.7-cp311-cp311-win_amd64.whl"
 name = "pytorch-cu128"
 url = "https://download.pytorch.org/whl/cu128"
 explicit = true
+
+[tool.uv.workspace]
+members = [
+    "VibeVoice",
+]
