@@ -32,9 +32,7 @@ def parse_epub_to_chapters(epub_path):
                     chapters.append(txt)
                     chapter_objs = get_chapter_objs(txt)
                     for chapter_obj in chapter_objs:
-                        print(chapter_obj.has_quotes)
-                        print(chapter_obj.speaker)
-                        print(chapter_obj.text)
+                        print(chapter_obj)
                     exit()
         return chapters
     

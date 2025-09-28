@@ -10,7 +10,7 @@ class ChapterObj:
         self.text = text
 
     def __str__(self):
-        return f"Speaker: {self.speaker}\nHas Quotes: {self.has_quotes}\nText: {self.text}"
+        return f"Speaker: {self.speaker}\nHas Quotes: {self.has_quotes}\nText: {self.text[:50]}"
 
 def get_chapter_objs(text: str):
     """
@@ -34,7 +34,7 @@ def get_chapter_objs(text: str):
         # Skip empty paragraphs
         if paragraph.strip():
             # Check if there are quotations in the paragraph
-            has_quotes = '"' in paragraph or "'" in paragraph
+            has_quotes = any(x in paragraph for x in ["'",'"',"“","”"])
             chapter_objs.append(ChapterObj(has_quotes, speaker, paragraph))
     
     return chapter_objs
