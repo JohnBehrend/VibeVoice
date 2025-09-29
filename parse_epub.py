@@ -95,8 +95,7 @@ def main():
     
     # try to find characters that have quotes.
     #valid_speakers = {}
-    previous_valid_speaker=None # add d or ed...
-    previous_valid_context = [\
+    valid_context = [
         "said",
         "mutter","muttered",
         "voice","voiced",
@@ -123,8 +122,7 @@ def main():
         "chuckle","chuckled",
         "add","added",
         "answer","answered",
-        "could"]
-    current_valid_context = [
+        "could",
         "indicate", "indicated",
         "nod", "nodded",
         "sighed",
@@ -133,7 +131,7 @@ def main():
         "showed",
         "straightened",
         "made",
-        "smile","smiled",
+        "smiled",
         "blink","blinked",
         "stop","stopped",
         "drew","drawing",
@@ -199,7 +197,6 @@ def main():
         "quoted",
         "noticed",
         "peered",
-        "was",
         "rounded",
         "cleared",
         "let",
@@ -444,51 +441,68 @@ def main():
         "formed",
         "plunged"
     ]
+    same_speaker_tokens = [
+        "his",
+        "he",
+        "it",
+        "its",
+        "she",
+        "her",
+        "we",
+        "they"
+    ]
     for i, chapter in enumerate(chapters):
         # print(f"CHAPTER{i}")
         was_quote = False
+        previous_valid_speaker="previous_valid_speaker"
+        previous_other_speaker="previous_other_speaker"
         for j, chapter_obj in enumerate(chapter):
             toks = chapter_obj.text.split(" ")
             if chapter_obj.has_quotes is False:
+                chapter[j].set_speaker("narrator")
                 if len(toks)>=2:
-                    speaker, context = toks[:2]
-                    if context.replace(",","").replace(".","").replace(";","") in previous_valid_context:
+                    speaker = toks[0].lower().replace(",","").replace(".","").replace(";","").replace("'s","").replace("'","")
+                    context = toks[1].lower().replace(",","").replace(".","").replace(";","")
+
+                    # He/she/we/they don't update speaker
+                    if speaker in same_speaker_tokens:
+                        speaker = previous_valid_speaker
+                    
+                    if context in valid_context:
                         # change speaker if we have good context
                         if was_quote:
                             chapter[j-1].set_speaker(speaker)
+                        previous_other_speaker = previous_valid_speaker
                         previous_valid_speaker = speaker
-                        #print(speaker, '\n', chapter[j-1].text, '\n', chapter[j].text)
-                    elif previous_valid_speaker is not None and context.replace(",","").replace(".","").replace(";","") in current_valid_context:
-                        # Use current speaker but update for future.
-                        chapter[j-1].set_speaker(previous_valid_speaker)
-                        previous_valid_speaker = speaker
-                        # print(speaker, ' UPDATE\n', chapter[j].text)                        
-                    elif previous_valid_speaker is not None:
-                        # Use current speaker. Don't update.
+                    else: #invalid context, keep current speaker
                         if was_quote:
                             chapter[j-1].set_speaker(previous_valid_speaker)
-                            print(" INVALID context ", context)
-                            #print("\tusing previous valid ", previous_valid_speaker,"\n", chapter[j].text)
-                    else:
-                        chapter[j-1].set_speaker("narrator")
-                        # print("INITIAL INVALID context:", context, "\n",chapter[j-2].text, '\n',chapter[j-1].text, '\n', chapter[j].text)
-                else: # not enough context keep same speaker
+                            #print(" INVALID context ", context)
+                            #print("\tusing previous valid ", previous_valid_speaker,"\n", chapter[j-1].text)
+                else: # not enough context so keep same speaker
                     if was_quote:
                         chapter[j-1].set_speaker(previous_valid_speaker)
-            else: # chapter_ojb.has_quotes is True
-                #  Do nothing for now.
-                pass
-            if chapter_obj.has_quotes:
-                was_quote = True
-            else:
-                was_quote = False
+                        previous_other_speaker, previous_valid_speaker = previous_valid_speaker, previous_other_speaker
+            elif chapter_obj.has_quotes is True:
+                # print("prev",previous_valid_speaker,"other",previous_other_speaker)
+                chapter[j].set_speaker(previous_valid_speaker)
+                #if was_quote: # swap to prior speaker if sequential
+                previous_other_speaker, previous_valid_speaker = previous_valid_speaker, previous_other_speaker
+            was_quote = chapter_obj.has_quotes
+
     #print("\n".join([str(x) for x in sorted(speaker_counts.items(), key=lambda x: x[1], reverse=True)]))
     # Print each chapter (you can modify this to output in different formats)
+    speakers = set()
     for i, chapter in enumerate(chapters):
         #print(f"\n--- Chapter {i+1} ---")
         for j, chapter_obj in enumerate(chapter):
-            pass#print(chapter_obj)
+            print(chapter_obj)
+            speakers.add(chapter_obj.get_speaker())
+            #pass#print(chapter_obj)
             #if (chapter_obj.has_quotes and chapter_obj.speaker == "narrator"):
             #    print("Speaker 2:", chapter_obj.text)
+        break
+    print("SPEAKERS")
+    print(speakers)
 if __name__ == "__main__":
     main()
