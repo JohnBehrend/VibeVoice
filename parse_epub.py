@@ -28,28 +28,21 @@ def main():
         for j, chapter_obj in enumerate(chapter):
             toks = chapter_obj.text.split(" ")
             if chapter_obj.has_quotes is True:
-                # Only set speaker reference for has_quotes objects
-                if was_quote:
-                    chapter[j].set_last_other_valid_speaker()
-                else:
-                    chapter[j].set_last_valid_speaker()
+                # If we have quotes, only set the speaker if it was unknonwn.
+                if chapter_obj.get_speaker() is None:
+                    chapter_obj.set_speaker(next_valid_speaker)
+                elif was_quote:
+                    chapter_obj.swap_speaker() # update speaker for sequential quotes
             elif chapter_obj.has_quotes is False:
-                chapter[j].set_speaker("narrator")
                 if len(toks)>=2: # can update prior chapters if we have context
                     speaker = toks[0].lower().replace(",","").replace(".","").replace(";","").replace("'s","").replace("'","")
                     context = toks[1].lower().replace(",","").replace(".","").replace(";","")
-                    # only update previous chapter if it was a quote
-                    if was_quote:
-                        # change speaker if we have good context
-                        if context in valid_context:
-                            # He/she/we/they don't update speaker
-                            if speaker in same_speaker_tokens:
-                                chapter[j-1].set_last_valid_speaker()
+                    if context in valid_context:
+                        if speaker not in same_speaker_tokens: # Ignore He/she/we/they
+                            if was_quote:
+                                chapter[j-1].set_speaker(speaker) # only update previous chapter if it was a quote
                             else:
-                                chapter[j-1].set_speaker(speaker)
-                    else:
-                        if context in valid_context:
-                            next_valid_speaker = speaker
+                                next_valid_speaker = speaker # but keep track of valid speakers for next quote
             was_quote = chapter_obj.has_quotes
 
     #print("\n".join([str(x) for x in sorted(speaker_counts.items(), key=lambda x: x[1], reverse=True)]))

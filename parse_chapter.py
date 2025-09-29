@@ -6,17 +6,19 @@ Module to parse chapter content and return chapter objects.
 import re
 
 class ChapterObj:
-    def __init__(self, has_quotes: bool, text: str, speaker, prev):
+    def __init__(self, has_quotes: bool, text: str, prev_speaker, other_speaker):
         self.has_quotes = has_quotes
-        self.speaker = speaker # speaker can be either a string or a reference to prior ChapterObj
+        if self.has_quotes:
+            self.speaker = prev_speaker
+        else:
+            self.speaker = "narrator"
         self.text = text.strip()
-        self.prev = prev
+        self.other_speaker = other_speaker
     def _get_speaker_num(self):
         if self.has_quotes:
             return 2
         else:
             return 1
-
     def __str__(self):
         #return f"Speaker {self._get_speaker_num()}: {self.text}"
         return f"Speaker {int(self.has_quotes)}: ({self.get_speaker()})  {self.text}"
@@ -29,35 +31,9 @@ class ChapterObj:
         else:
             return self.speaker
     def set_speaker(self, speaker):
-        # Allow speaker to be either a string or another ChapterObj
         self.speaker = speaker
-
-    def set_last_other_valid_speaker(self):
-        # use link to prev to get the last chapter obj with has_quotes=True.
-        # ignores the first match.
-        self.speaker = self.prev.get_last_other_valid_speaker()
-
-    def set_last_valid_speaker(self):
-        # use link to prev to get the last chapter obj with has_quotes=True
-        self.speaker = self.prev.get_last_valid_speaker()
-
-    def get_last_other_valid_speaker(self):
-        """Recursively look at prev ChapterObj for the next one with has_quotes=True, but skip the first."""
-        if self.prev is None:
-            return None
-        if self.has_quotes:
-            return self.prev.get_last_valid_speaker()
-        else:
-            return self.prev.get_last_other_valid_speaker()
-        
-    def get_last_valid_speaker(self):
-        """Recursively look at prev ChapterObj for the next one with has_quotes=True."""
-        if self.prev is None:
-            return None
-        if self.has_quotes:
-            return self
-        else:
-            return self.prev.get_last_valid_speaker()
+    def swap_speaker(self):
+        self.speaker, self.other_speaker = self.other_speaker, self.speaker
 
 def get_chapter_objs(text: str):
     """
@@ -74,7 +50,8 @@ def get_chapter_objs(text: str):
     
     # Create a list of ChapterObj for each paragraph
     chapter_objs = []
-    prev = None
+    prev_speaker = None # prev_speaker only links between quoted areas
+    other_speaker = None # lag behind prev_speaker by 1 to enable swapping
     for paragraph in paragraphs:
         # Skip empty paragraphs
         if paragraph.strip():
@@ -88,11 +65,13 @@ def get_chapter_objs(text: str):
                     quote_en=False
                 for quote in quotes:
                     if len(quote)>0:
-                        chapter_objs.append(ChapterObj(quote_en,  quote, None, prev))
-                        prev = chapter_objs[-1]
+                        chapter_objs.append(ChapterObj(quote_en,  quote, prev_speaker, other_speaker))
+                        if quote_en:
+                            other_speaker = prev_speaker
+                            prev_speaker = chapter_objs[-1]
+                            
                     quote_en = not quote_en
             else:
                 # No quotes, treat as normal paragraph
-                chapter_objs.append(ChapterObj(False, paragraph, None, prev))
-                prev = chapter_objs[-1]
+                chapter_objs.append(ChapterObj(False, paragraph, prev_speaker, other_speaker))
     return chapter_objs

@@ -35,7 +35,6 @@ valid_context = [
     "nod", "nodded",
     "sighed",
     "rose", "lifted", "dropped",
-    "gave",
     "showed",
     "straightened",
     "made",
