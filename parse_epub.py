@@ -59,7 +59,7 @@ def main():
                     if speaker is None:
                         pass # print(f"UNKNOWN SPEAKER from {toks}")
                     if speaker:
-                        if speaker not in same_speaker_tokens+invalid_speaker_list: # Ignore He/she/we/they
+                        if speaker not in invalid_speaker_list: # Ignore He/she/we/they
                             if was_quote:
                                 # print("**",speaker, " set to ",chapter[j-1])
                                 chapter[j-1].set_speaker(speaker) # only update previous chapter if it was a quote
