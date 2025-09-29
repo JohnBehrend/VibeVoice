@@ -19,7 +19,7 @@ class ChapterObj:
 
     def __str__(self):
         #return f"Speaker {self._get_speaker_num()}: {self.text}"
-        return f"Speaker {int(self.has_quotes)}: ({self.speaker})  {self.text}"
+        return f"Speaker {int(self.has_quotes)}: ({self.get_speaker()})  {self.text}"
     def get_speaker(self):
         # If we have a speaker reference and it's a ChapterObj, resolve it
         if self.speaker is None:
@@ -31,6 +31,33 @@ class ChapterObj:
     def set_speaker(self, speaker):
         # Allow speaker to be either a string or another ChapterObj
         self.speaker = speaker
+
+    def set_last_other_valid_speaker(self):
+        # use link to prev to get the last chapter obj with has_quotes=True.
+        # ignores the first match.
+        self.speaker = self.prev.get_last_other_valid_speaker()
+
+    def set_last_valid_speaker(self):
+        # use link to prev to get the last chapter obj with has_quotes=True
+        self.speaker = self.prev.get_last_valid_speaker()
+
+    def get_last_other_valid_speaker(self):
+        """Recursively look at prev ChapterObj for the next one with has_quotes=True, but skip the first."""
+        if self.prev is None:
+            return None
+        if self.has_quotes:
+            return self.prev.get_last_valid_speaker()
+        else:
+            return self.prev.get_last_other_valid_speaker()
+        
+    def get_last_valid_speaker(self):
+        """Recursively look at prev ChapterObj for the next one with has_quotes=True."""
+        if self.prev is None:
+            return None
+        if self.has_quotes:
+            return self
+        else:
+            return self.prev.get_last_valid_speaker()
 
 def get_chapter_objs(text: str):
     """
