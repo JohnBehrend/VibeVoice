@@ -20,8 +20,8 @@ class ChapterObj:
         else:
             return 1
     def __str__(self):
-        #return f"Speaker {self._get_speaker_num()}: {self.text}"
-        return f"Speaker {int(self.has_quotes)}: ({self.get_speaker()})  {self.text}"
+        return f"Speaker {self._get_speaker_num()}: {self.text}"
+        # return f"Speaker {int(self.has_quotes)}: ({self.get_speaker()})  {self.text}"
     def get_speaker(self):
         # If we have a speaker reference and it's a ChapterObj, resolve it
         if self.speaker is None:

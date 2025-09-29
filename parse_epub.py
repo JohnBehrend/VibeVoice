@@ -53,7 +53,6 @@ def main():
         for j, chapter_obj in enumerate(chapter):
             print(chapter_obj)
             # speakers.add(chapter_obj.get_speaker())
-        break
     # print("SPEAKERS")
     # print(speakers)
 if __name__ == "__main__":
