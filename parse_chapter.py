@@ -48,12 +48,12 @@ def get_chapter_objs(text: str):
             if '"' in paragraph:
                 # Find all quoted text in the paragraph
                 quotes = [x.strip() for x in paragraph.split('"')]
-                if paragraph.startswith('"'):# or paragraph.startswith("'"):
+                if paragraph.startswith('"'):
                     quote_en=True
                 else:
                     quote_en=False
                 for quote in quotes:
-                    if len(quote)>0: 
+                    if len(quote)>0:
                         chapter_objs.append(ChapterObj(quote_en, speaker, quote))
                     quote_en = not quote_en
             else:
