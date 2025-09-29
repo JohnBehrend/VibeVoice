@@ -4,7 +4,9 @@ from ebooklib import epub
 from bs4 import BeautifulSoup
 
 invalid_speaker_list = [
-    "Sedai"
+    "Sedai",
+    "Light",
+    "Dust"
 ]
 valid_context_list = [
     "said",
@@ -397,7 +399,8 @@ same_speaker_tokens = [
     "she",
     "her",
     "we",
-    "they"]
+    "they",
+    "you"]
 
 def parse_epub_to_chapters(epub_path):
     """

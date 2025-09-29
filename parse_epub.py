@@ -29,10 +29,15 @@ def main():
             toks = chapter_obj.text.split(" ")
             if chapter_obj.has_quotes is True:
                 # If we have quotes, only swap the speaker if it was unknonwn.
-                if next_valid_speaker is None:
-                    pass# chapter_obj.swap_speaker()
-                elif was_quote:
-                    pass#chapter_obj.swap_speaker()
+                if was_quote or next_valid_speaker is None:
+                    temp = j
+                    while(temp>0):
+                        if chapter[temp].has_quotes:
+                            if chapter[temp].get_speaker() != chapter_obj.get_speaker():
+                                if chapter[temp].get_speaker() is not None:
+                                    chapter_obj.set_speaker(chapter[temp].get_speaker())
+                                    break
+                        temp = temp-1
                 else: # If we know the speaker, use it
                     chapter_obj.set_speaker(next_valid_speaker)
             elif chapter_obj.has_quotes is False:
@@ -62,21 +67,27 @@ def main():
                         else:
                             next_valid_speaker = None
             was_quote = chapter_obj.has_quotes
-    # Try to detect sequential quotes and ensure that they have unique speakers.
-    prev_speaker=None
-    prev_other_speaker=None
-    for i in range(len(chapters)):
-        if (i>1) and chapter[i].has_quotes is True:
-            speaker = chapter[i].get_speaker()
-            prev_speaker = chapter[i-1].get_speaker()
-            if prev_speaker == "narrator":
-                pass # not enough information to swap
-            elif prev_speaker == speaker and prev_other_speaker is not None: # same speaker, so swap
-                chapter[i].set_speaker(prev_other_speaker)
-                prev_other_speaker = speaker
+    # # Try to detect sequential quotes and ensure that they have unique speakers.
+    # prev_speaker=None
+    # prev_other_speaker=None
+    # for chapter in chapters:
+    #     for i, chapter_obj in enumerate(chapter):
+    #         if chapter_obj.has_quotes:
+    #             speaker = chapter_obj.get_speaker()
+    #             if (i>0):
+    #                 # record prior speaker if it was different
+    #                 if chapter[i-1].has_quotes:
+    #                     prev_speaker = chapter[i-1].get_speaker()                
+    #                     if prev_speaker != speaker:
+    #                         prev_other_speaker = prev_speaker
+    #                     elif prev_speaker == speaker:
+    #                         print("SEQUENTIAL SPEAKER, NEEDS TO SWAP")
+    #                         if prev_other_speaker is not None: # same speaker, so swap
+    #                             print("UPDATE sequential", speaker, prev_speaker, prev_other_speaker)
+    #                             chapter[i].set_speaker(prev_other_speaker)
     # Print each chapter (you can modify this to output in different formats)
     speaker_counts={}
-    for i, chapter in enumerate(chapters[1:]):
+    for i, chapter in enumerate(chapters[2:]):
         #print(f"\n--- Chapter {i+1} ---")
         for j, chapter_obj in enumerate(chapter):
             print(chapter_obj)

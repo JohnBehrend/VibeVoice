@@ -6,14 +6,13 @@ Module to parse chapter content and return chapter objects.
 import re
 
 class ChapterObj:
-    def __init__(self, has_quotes: bool, text: str, prev_speaker, other_speaker):
+    def __init__(self, has_quotes: bool, text: str, prev_speaker):
         self.has_quotes = has_quotes
         if self.has_quotes:
             self.speaker = prev_speaker
         else:
             self.speaker = "narrator"
         self.text = text.strip()
-        self.other_speaker = other_speaker
     def _get_speaker_num(self):
         if self.has_quotes:
             return 2
@@ -36,8 +35,6 @@ class ChapterObj:
             return self.speaker
     def set_speaker(self, speaker):
         self.speaker = speaker
-    def swap_speaker(self):
-        self.speaker, self.other_speaker = self.other_speaker, self.speaker
 
 def get_chapter_objs(text: str):
     """
@@ -55,7 +52,6 @@ def get_chapter_objs(text: str):
     # Create a list of ChapterObj for each paragraph
     chapter_objs = []
     prev_speaker = None # prev_speaker only links between quoted areas
-    other_speaker = None # lag behind prev_speaker by 1 to enable swapping
     for paragraph in paragraphs:
         # Skip empty paragraphs
         if paragraph.strip():
@@ -69,13 +65,12 @@ def get_chapter_objs(text: str):
                     quote_en=False
                 for quote in quotes:
                     if len(quote)>0:
-                        chapter_objs.append(ChapterObj(quote_en,  quote, prev_speaker, other_speaker))
+                        chapter_objs.append(ChapterObj(quote_en,  quote, prev_speaker))
                         if quote_en:
-                            other_speaker = prev_speaker
                             prev_speaker = chapter_objs[-1]
                             
                     quote_en = not quote_en
             else:
                 # No quotes, treat as normal paragraph
-                chapter_objs.append(ChapterObj(False, paragraph, prev_speaker, other_speaker))
+                chapter_objs.append(ChapterObj(False, paragraph, prev_speaker))
     return chapter_objs
