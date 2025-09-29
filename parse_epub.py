@@ -32,10 +32,7 @@ def main():
                 if was_quote:
                     chapter[j].set_last_other_valid_speaker()
                 else:
-                    if next_valid_speaker is None:
-                        chapter[j].set_last_valid_speaker()
-                    else:
-                        chapter[j-1].set_speaker(next_valid_speaker)
+                    chapter[j].set_last_valid_speaker()
             elif chapter_obj.has_quotes is False:
                 chapter[j].set_speaker("narrator")
                 if len(toks)>=2: # can update prior chapters if we have context
