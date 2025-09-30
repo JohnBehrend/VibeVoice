@@ -531,6 +531,7 @@ speaker_map =dict([
 ('Lan', 2),
 ('Amyrlin', 3),
 (None, 1),
+('None', 1),
 ('Rand', 2),
 ('Zarine', 3),
 ('Verin', 3),
@@ -742,6 +743,7 @@ speaker_map =dict([
 ('Eldrith', 3),
 ('Estean', 3),
 ('Jorin', 2),
+('Faile', 3),
 ('Charlin', 2),
 ('Sulwin', 3),
 ('Gelb', 2),
@@ -773,7 +775,8 @@ class ChapterObj:
         # else:
         #     return self.text
         #return f"Speaker {self._get_speaker_num()}: {self.text}"
-        return f"Speaker {self.get_speaker()}: ({self.get_speaker()})  {self.text}"
+        #return f"Speaker {self.get_speaker()}: ({self.get_speaker()})  {self.text}"
+        return f"Speaker {speaker_map[self.get_speaker()]}: ({self.get_speaker()})  {self.text}"
     def get_speaker(self):
         # If we have a speaker reference and it's a ChapterObj, resolve it
         if self.speaker is None:
