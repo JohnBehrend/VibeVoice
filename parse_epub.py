@@ -8,8 +8,10 @@ import sys
 import os
 from parse_chapter import valid_context_list, invalid_speaker_list
 from parse_chapter import same_speaker_tokens, parse_epub_to_chapters
+from parse_chapter import speaker_map
+from demo.inference_from_file import main
 
-def main():
+def parse_epub():
     parser = argparse.ArgumentParser(description="Parse an EPUB file into an array of chapters")
     parser.add_argument("epub_file", help="Path to the EPUB file")
     parser.add_argument("--speaker_histogram", action="store_true", help="Print out a histogram of speakers.")
@@ -72,26 +74,33 @@ def main():
 
     # Print each chapter (you can modify this to output in different formats)
     speaker_counts={}
+    if not os.path.isdir("./chapters") and args.by_chapter:
+        os.mkdir("./chapters")
     for i, chapter in enumerate(chapters):
         #print(f"\n--- Chapter {i+1} ---")
         if args.by_chapter:
-            if not os.path.isdir("./chapters"):
-                os.mkdir("./chapters")
             with open(f"./chapters/chapter_{str(i).zfill(2)}.txt", "w") as f:
                 for j, chapter_obj in enumerate(chapter):
-                    f.write(str(chapter_obj)+"\r\n")
-        for j, chapter_obj in enumerate(chapter):
-            if not args.by_chapter:
-                print(chapter_obj)
-            if args.speaker_histogram:
-                this_speaker = str(chapter_obj.get_speaker())
-                if this_speaker in speaker_counts.keys():
-                    speaker_counts[this_speaker]+=1
-                else:
-                    speaker_counts[this_speaker]=1
+                    f.write(str(chapter_obj)+"\n")
+            main(
+                other_args=argparse.Namespace(
+                model_path="Jmica/VibeVoice7B",
+                speaker_names=["John","Frank","Alice","Travis"],
+                device="cuda",
+                cfg_scale=1.4,
+                output_dir="./chapters/",
+                txt_path=f"./chapters/chapter_{str(i).zfill(2)}.txt"))
+        else:
+            print(chapter_obj)
+        if args.speaker_histogram:
+            this_speaker = str(chapter_obj.get_speaker())
+            if this_speaker in speaker_counts.keys():
+                speaker_counts[this_speaker]+=1
+            else:
+                speaker_counts[this_speaker]=1
         # break
     print("\n".join([str(x) for x in sorted(speaker_counts.items(), key=lambda x: x[1], reverse=True)]))
     # print("SPEAKERS")
     # print(speakers)
 if __name__ == "__main__":
-    main()
+    parse_epub()

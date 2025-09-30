@@ -181,9 +181,11 @@ def parse_args():
     
     return parser.parse_args()
 
-def main():
-    args = parse_args()
-
+def main(other_args=None):
+    if other_args is None:
+        args = parse_args()
+    else:
+        args = other_args
     # Normalize potential 'mpx' typo to 'mps'
     if args.device.lower() == "mpx":
         print("Note: device 'mpx' detected, treating it as 'mps'.")
