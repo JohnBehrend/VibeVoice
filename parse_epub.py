@@ -5,13 +5,15 @@ Simple Python script to parse an EPUB file into an array of chapters.
 
 import argparse
 import sys
+import os
 from parse_chapter import valid_context_list, invalid_speaker_list
 from parse_chapter import same_speaker_tokens, parse_epub_to_chapters
 
 def main():
     parser = argparse.ArgumentParser(description="Parse an EPUB file into an array of chapters")
     parser.add_argument("epub_file", help="Path to the EPUB file")
-    
+    parser.add_argument("--speaker_histogram", action="store_true", help="Print out a histogram of speakers.")
+    parser.add_argument("--by_chapter", action="store_true", help="Save a file per chapter in a new folder labled chapters")
     args = parser.parse_args()
     
     # Parse the EPUB file
@@ -72,13 +74,21 @@ def main():
     speaker_counts={}
     for i, chapter in enumerate(chapters):
         #print(f"\n--- Chapter {i+1} ---")
+        if args.by_chapter:
+            if not os.path.isdir("./chapters"):
+                os.mkdir("./chapters")
+            with open(f"./chapters/chapter_{str(i).zfill(2)}.txt", "w") as f:
+                for j, chapter_obj in enumerate(chapter):
+                    f.write(str(chapter_obj)+"\r\n")
         for j, chapter_obj in enumerate(chapter):
-            print(chapter_obj)
-            this_speaker = str(chapter_obj.get_speaker())
-            if this_speaker in speaker_counts.keys():
-                speaker_counts[this_speaker]+=1
-            else:
-                speaker_counts[this_speaker]=1
+            if not args.by_chapter:
+                print(chapter_obj)
+            if args.speaker_histogram:
+                this_speaker = str(chapter_obj.get_speaker())
+                if this_speaker in speaker_counts.keys():
+                    speaker_counts[this_speaker]+=1
+                else:
+                    speaker_counts[this_speaker]=1
         # break
     print("\n".join([str(x) for x in sorted(speaker_counts.items(), key=lambda x: x[1], reverse=True)]))
     # print("SPEAKERS")
