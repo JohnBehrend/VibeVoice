@@ -5,8 +5,8 @@ Simple Python script to parse an EPUB file into an array of chapters.
 
 import argparse
 import sys
-from parse_helper import valid_context_list, invalid_speaker_list, same_speaker_tokens, parse_epub_to_chapters
-from parse_chapter import ChapterObj
+from parse_chapter import valid_context_list, invalid_speaker_list
+from parse_chapter import same_speaker_tokens, parse_epub_to_chapters
 
 def main():
     parser = argparse.ArgumentParser(description="Parse an EPUB file into an array of chapters")
@@ -59,7 +59,7 @@ def main():
                     if speaker is None:
                         pass # print(f"UNKNOWN SPEAKER from {toks}")
                     if speaker:
-                        if speaker not in invalid_speaker_list: # Ignore He/she/we/they
+                        if speaker not in invalid_speaker_list+[x for x in same_speaker_tokens if x not in ["she","her"]]: # Ignore He/she/we/they
                             if was_quote:
                                 # print("**",speaker, " set to ",chapter[j-1])
                                 chapter[j-1].set_speaker(speaker) # only update previous chapter if it was a quote
@@ -67,27 +67,10 @@ def main():
                         else:
                             next_valid_speaker = None
             was_quote = chapter_obj.has_quotes
-    # # Try to detect sequential quotes and ensure that they have unique speakers.
-    # prev_speaker=None
-    # prev_other_speaker=None
-    # for chapter in chapters:
-    #     for i, chapter_obj in enumerate(chapter):
-    #         if chapter_obj.has_quotes:
-    #             speaker = chapter_obj.get_speaker()
-    #             if (i>0):
-    #                 # record prior speaker if it was different
-    #                 if chapter[i-1].has_quotes:
-    #                     prev_speaker = chapter[i-1].get_speaker()                
-    #                     if prev_speaker != speaker:
-    #                         prev_other_speaker = prev_speaker
-    #                     elif prev_speaker == speaker:
-    #                         print("SEQUENTIAL SPEAKER, NEEDS TO SWAP")
-    #                         if prev_other_speaker is not None: # same speaker, so swap
-    #                             print("UPDATE sequential", speaker, prev_speaker, prev_other_speaker)
-    #                             chapter[i].set_speaker(prev_other_speaker)
+
     # Print each chapter (you can modify this to output in different formats)
     speaker_counts={}
-    for i, chapter in enumerate(chapters[2:]):
+    for i, chapter in enumerate(chapters):
         #print(f"\n--- Chapter {i+1} ---")
         for j, chapter_obj in enumerate(chapter):
             print(chapter_obj)
@@ -96,7 +79,7 @@ def main():
                 speaker_counts[this_speaker]+=1
             else:
                 speaker_counts[this_speaker]=1
-        break
+        # break
     print("\n".join([str(x) for x in sorted(speaker_counts.items(), key=lambda x: x[1], reverse=True)]))
     # print("SPEAKERS")
     # print(speakers)
