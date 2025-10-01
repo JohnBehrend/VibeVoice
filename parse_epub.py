@@ -8,13 +8,15 @@ import sys
 import os
 from parse_chapter import valid_context_list, invalid_speaker_list
 from parse_chapter import same_speaker_tokens, parse_epub_to_chapters
-from parse_chapter import speaker_map
-from demo.inference_from_file import main
 
+# Text to speach generation
 import torch
 from vibevoice.processor.vibevoice_processor import VibeVoiceProcessor
 from vibevoice.modular.modeling_vibevoice_inference import VibeVoiceForConditionalGenerationInference
 from demo.inference_from_file import VoiceMapper
+
+# Voice to Text for validation
+from difflib import SequenceMatcher
 from faster_whisper import WhisperModel
 
 def parse_epub():
@@ -84,15 +86,16 @@ def parse_epub():
     voice_mapper = VoiceMapper()
 
     target_device="cuda"
-    model_path="microsoft/VibeVoice-1.5B"
+    model_path="Jmica/VibeVoice7B"#"microsoft/VibeVoice-1.5B"
     tts_model = VibeVoiceForConditionalGenerationInference.from_pretrained(
-        model_path, # model_path Jmica/VibeVoice7B
+        model_path, # model_path 
         torch_dtype=torch.bfloat16,
         device_map=target_device,
         attn_implementation="flash_attention_2",
     )
     tts_model.eval()
     tts_model.set_ddpm_inference_steps(num_steps=10)
+    processor = VibeVoiceProcessor.from_pretrained(model_path)
 
     if hasattr(tts_model.model, 'language_model'):
        print(f"Language model attention: {tts_model.model.language_model.config._attn_implementation}")
@@ -101,45 +104,57 @@ def parse_epub():
     for i, chapter in enumerate(chapters):
         #print(f"\n--- Chapter {i+1} ---")
         if args.by_chapter:
-            full_script = ""
             for j, chapter_obj in enumerate(chapter):
-                full_script+=str(chapter_obj)+"\n"
-                processor = VibeVoiceProcessor.from_pretrained(model_path)
+                full_script=str(chapter_obj)
+                ratio = 0.0
+                max_ratio = 0.0
+                retries = 0
+                while ratio < 0.82 and retries < 10:
+                    # Prepare inputs for the model
+                    # TODO: Pick the sample with the best matching as instead of overwriting each time.
+                    inputs = processor(
+                        text=[full_script], # Wrap in list for batch processing
+                        voice_samples=[voice_mapper.get_voice_path(speaker_name) for speaker_name in 
+                                    ["en-John_man","en-Jeff_man","en-Alice_woman","en-Travis_man"]], # Wrap in list for batch processing
+                        padding=True,
+                        return_tensors="pt",
+                        return_attention_mask=True,
+                    )
+                    for k, v in inputs.items():
+                        if torch.is_tensor(v):
+                            inputs[k] = v.to(target_device)
 
-                # Prepare inputs for the model
-                inputs = processor(
-                    text=[full_script], # Wrap in list for batch processing
-                    voice_samples=[voice_mapper.get_voice_path(speaker_name) for speaker_name in 
-                                ["en-John_man","en-Jeff_man","en-Alice_woman","en-Travis_man"]], # Wrap in list for batch processing
-                    padding=True,
-                    return_tensors="pt",
-                    return_attention_mask=True,
-                )
-                for k, v in inputs.items():
-                    if torch.is_tensor(v):
-                        inputs[k] = v.to(target_device)
+                    outputs = tts_model.generate(
+                        **inputs,
+                        max_new_tokens=None,
+                        cfg_scale=1.4,#cfg_scale
+                        tokenizer=processor.tokenizer,
+                        generation_config={'do_sample': False},
+                        verbose=False,
+                    )
 
-                outputs = tts_model.generate(
-                    **inputs,
-                    max_new_tokens=None,
-                    cfg_scale=1.4,#cfg_scale
-                    tokenizer=processor.tokenizer,
-                    generation_config={'do_sample': False},
-                    verbose=True,
-                )
+                    # Save output (processor handles device internally)
+                    output_path = f"./chapters/chapter_{str(i).zfill(2)}.{str(j).zfill(4)}.tmp.wav"            
+                    processor.save_audio(
+                        outputs.speech_outputs[0], # First (and only) batch item
+                        output_path=output_path,
+                    )
+                    #print(f"Saved output to {output_path}")
+                    segments, info = validation_model.transcribe(f"./chapters/chapter_{str(i).zfill(2)}.{str(j).zfill(4)}.tmp.wav")
+                    input_string = chapter_obj.text
+                    detected_string = "\n".join([str(x.text) for x in segments])
 
-                # Save output (processor handles device internally)
-                output_path = f"./chapters/chapter_{str(i).zfill(2)}.wav"            
-                processor.save_audio(
-                    outputs.speech_outputs[0], # First (and only) batch item
-                    output_path=output_path,
-                )
-                print(f"Saved output to {output_path}")
-                segments, info = validation_model.transcribe(f"./chapters/chapter_{str(i).zfill(2)}.wav")
-                print(chapter_obj)
-                for segment in segments:
-                    print(segment)
-                break # chapter_obj
+                    ratio = SequenceMatcher(None, input_string.lower(), detected_string.lower()).ratio()
+                    if ratio > max_ratio:
+                        max_ratio = ratio
+                        if os.path.exists( f"./chapters/chapter_{str(i).zfill(2)}.{str(j).zfill(4)}.wav"):
+                            os.unlink(f"./chapters/chapter_{str(i).zfill(2)}.{str(j).zfill(4)}.wav")
+                        os.rename(f"./chapters/chapter_{str(i).zfill(2)}.{str(j).zfill(4)}.tmp.wav",
+                                   f"./chapters/chapter_{str(i).zfill(2)}.{str(j).zfill(4)}.wav")
+                    print(str(j).zfill(4),", Attempt: ", retries+1, ", Ratio: ", ratio)
+                    retries+=1
+                if os.path.exists(f"./chapters/chapter_{str(i).zfill(2)}.{str(j).zfill(4)}.tmp.wav"):
+                    os.unlink(f"./chapters/chapter_{str(i).zfill(2)}.{str(j).zfill(4)}.tmp.wav")
             break # chapters
         else:
             print(chapter_obj)
