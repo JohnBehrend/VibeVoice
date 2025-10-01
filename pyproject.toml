@@ -37,6 +37,7 @@ dependencies = [
     "triton-windows<3.4",
     "ebooklib>=0.19",
     "beautifulsoup4>=4.13.5",
+    "pydub>=0.25.1",
 ]
 
 
