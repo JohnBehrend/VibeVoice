@@ -19,6 +19,10 @@ from demo.inference_from_file import VoiceMapper
 from difflib import SequenceMatcher
 from faster_whisper import WhisperModel
 
+# combine auido files
+import glob
+import pydub
+
 def parse_epub():
     parser = argparse.ArgumentParser(description="Parse an EPUB file into an array of chapters")
     parser.add_argument("epub_file", help="Path to the EPUB file")
@@ -154,7 +158,15 @@ def parse_epub():
                     retries+=1
                 if os.path.exists(f"./chapters/chapter_{str(i).zfill(2)}.{str(j).zfill(4)}.tmp.wav"):
                     os.unlink(f"./chapters/chapter_{str(i).zfill(2)}.{str(j).zfill(4)}.tmp.wav")
-            break # chapters
+            wavs = glob.glob(f"./chapters/chapter_*_*.wav")
+            combo = None
+            for wav in wavs:
+                if combo is None:
+                    combo = pydub.AudioSegment.from_wav(wav)
+                else:
+                    combo = combo+pydub.AudioSegment.from_wav(wav)
+            combo.export(f"./chapters/chapter_{str(i).zfill(2)}.mp3", format="mp3")
+            # break # chapters
         else:
             print(chapter_obj)
         if args.speaker_histogram:
