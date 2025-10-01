@@ -158,7 +158,7 @@ def parse_epub():
                     retries+=1
                 if os.path.exists(f"./chapters/chapter_{str(i).zfill(2)}.{str(j).zfill(4)}.tmp.wav"):
                     os.unlink(f"./chapters/chapter_{str(i).zfill(2)}.{str(j).zfill(4)}.tmp.wav")
-            wavs = glob.glob(f"./chapters/chapter_*_*.wav")
+            wavs = glob.glob(f"./chapters/chapter_*.*.wav")
             combo = None
             for wav in wavs:
                 if combo is None:
@@ -166,6 +166,8 @@ def parse_epub():
                 else:
                     combo = combo+pydub.AudioSegment.from_wav(wav)
             combo.export(f"./chapters/chapter_{str(i).zfill(2)}.mp3", format="mp3")
+            # remove the wav files
+            [os.unlink(x) for x in wavs]
             # break # chapters
         else:
             print(chapter_obj)
