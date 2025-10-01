@@ -74,5 +74,5 @@ explicit = true
 
 [tool.uv.workspace]
 members = [
-    "VibeVoice",
+    "VibeVoiceRepo",
 ]

@@ -11,6 +11,12 @@ from parse_chapter import same_speaker_tokens, parse_epub_to_chapters
 from parse_chapter import speaker_map
 from demo.inference_from_file import main
 
+import torch
+from vibevoice.processor.vibevoice_processor import VibeVoiceProcessor
+from vibevoice.modular.modeling_vibevoice_inference import VibeVoiceForConditionalGenerationInference
+from demo.inference_from_file import VoiceMapper
+from faster_whisper import WhisperModel
+
 def parse_epub():
     parser = argparse.ArgumentParser(description="Parse an EPUB file into an array of chapters")
     parser.add_argument("epub_file", help="Path to the EPUB file")
@@ -74,22 +80,67 @@ def parse_epub():
 
     # Print each chapter (you can modify this to output in different formats)
     speaker_counts={}
-    if not os.path.isdir("./chapters") and args.by_chapter:
-        os.mkdir("./chapters")
+    os.makedirs("./chapters", exist_ok=True)
+    voice_mapper = VoiceMapper()
+
+    target_device="cuda"
+    model_path="microsoft/VibeVoice-1.5B"
+    tts_model = VibeVoiceForConditionalGenerationInference.from_pretrained(
+        model_path, # model_path Jmica/VibeVoice7B
+        torch_dtype=torch.bfloat16,
+        device_map=target_device,
+        attn_implementation="flash_attention_2",
+    )
+    tts_model.eval()
+    tts_model.set_ddpm_inference_steps(num_steps=10)
+
+    if hasattr(tts_model.model, 'language_model'):
+       print(f"Language model attention: {tts_model.model.language_model.config._attn_implementation}")
+
+    validation_model = WhisperModel("tiny.en")
     for i, chapter in enumerate(chapters):
         #print(f"\n--- Chapter {i+1} ---")
         if args.by_chapter:
-            with open(f"./chapters/chapter_{str(i).zfill(2)}.txt", "w") as f:
-                for j, chapter_obj in enumerate(chapter):
-                    f.write(str(chapter_obj)+"\n")
-            main(
-                other_args=argparse.Namespace(
-                model_path="Jmica/VibeVoice7B",
-                speaker_names=["John","Frank","Alice","Travis"],
-                device="cuda",
-                cfg_scale=1.4,
-                output_dir="./chapters/",
-                txt_path=f"./chapters/chapter_{str(i).zfill(2)}.txt"))
+            full_script = ""
+            for j, chapter_obj in enumerate(chapter):
+                full_script+=str(chapter_obj)+"\n"
+                processor = VibeVoiceProcessor.from_pretrained(model_path)
+
+                # Prepare inputs for the model
+                inputs = processor(
+                    text=[full_script], # Wrap in list for batch processing
+                    voice_samples=[voice_mapper.get_voice_path(speaker_name) for speaker_name in 
+                                ["en-John_man","en-Jeff_man","en-Alice_woman","en-Travis_man"]], # Wrap in list for batch processing
+                    padding=True,
+                    return_tensors="pt",
+                    return_attention_mask=True,
+                )
+                for k, v in inputs.items():
+                    if torch.is_tensor(v):
+                        inputs[k] = v.to(target_device)
+
+                outputs = tts_model.generate(
+                    **inputs,
+                    max_new_tokens=None,
+                    cfg_scale=1.4,#cfg_scale
+                    tokenizer=processor.tokenizer,
+                    generation_config={'do_sample': False},
+                    verbose=True,
+                )
+
+                # Save output (processor handles device internally)
+                output_path = f"./chapters/chapter_{str(i).zfill(2)}.wav"            
+                processor.save_audio(
+                    outputs.speech_outputs[0], # First (and only) batch item
+                    output_path=output_path,
+                )
+                print(f"Saved output to {output_path}")
+                segments, info = validation_model.transcribe(f"./chapters/chapter_{str(i).zfill(2)}.wav")
+                print(chapter_obj)
+                for segment in segments:
+                    print(segment)
+                break # chapter_obj
+            break # chapters
         else:
             print(chapter_obj)
         if args.speaker_histogram:
@@ -100,6 +151,9 @@ def parse_epub():
                 speaker_counts[this_speaker]=1
         # break
     print("\n".join([str(x) for x in sorted(speaker_counts.items(), key=lambda x: x[1], reverse=True)]))
+
+
+
     # print("SPEAKERS")
     # print(speakers)
 if __name__ == "__main__":
