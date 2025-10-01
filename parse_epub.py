@@ -111,7 +111,6 @@ def parse_epub():
                 retries = 0
                 while ratio < 0.82 and retries < 10:
                     # Prepare inputs for the model
-                    # TODO: Pick the sample with the best matching as instead of overwriting each time.
                     inputs = processor(
                         text=[full_script], # Wrap in list for batch processing
                         voice_samples=[voice_mapper.get_voice_path(speaker_name) for speaker_name in 
