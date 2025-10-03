@@ -165,7 +165,7 @@ def parse_epub():
             continue
         #print(f"\n--- Chapter {i+1} ---")
         if args.by_chapter:
-            for voice_idx in reversed(voices_map.keys()):
+            for voice_idx in voices_map.keys(): # reversed()
                 # Re-initialize the processor for a new voice
                 tts_model = VibeVoiceForConditionalGenerationInference.from_pretrained(
                     model_path, # model_path 
@@ -183,7 +183,7 @@ def parse_epub():
                     ratio = 0.0
                     max_ratio = 0.0
                     retries = 0
-                    while ratio < 0.9 and retries < 10:
+                    while ratio < 0.9 and retries < 3:
                         # Prepare inputs for the model
                         voice_used = voices_map[voice_idx]
                         inputs = processor(
