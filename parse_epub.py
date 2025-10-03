@@ -128,6 +128,7 @@ def parse_epub():
     tts_model.set_ddpm_inference_steps(num_steps=13)
     cfg_scale=1.85
     processor = VibeVoiceProcessor.from_pretrained(model_path)
+    end_map={".":"..", "?": "?...",",":"..."}
     for i, chapter in enumerate(chapters):
         if args.by_chapter:
             for voice_idx in reversed(voices_map.keys()): # reversed()
@@ -135,7 +136,12 @@ def parse_epub():
                 for j, chapter_obj in enumerate(chapter):
                     if voice_idx != speaker_map[chapter_obj.get_speaker()]:
                         continue # skip if its a different voice
-                    full_script="Speaker 1: "+str(chapter_obj.text[0].upper()+chapter_obj.text[1:])+str(".... go.")
+
+                    full_script="Speaker 1: "+str(chapter_obj.text[0].upper()+chapter_obj.text[1:])
+                    if full_script.endswith("."):
+                        full_script+=".."
+                    else:
+                        full_script+=" ..."
                     ratio = 0.0
                     max_ratio = 0.0
                     retries = 0
