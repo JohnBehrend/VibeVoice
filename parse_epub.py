@@ -27,63 +27,21 @@ import pydub
 
 # Filter audio files
 from sidon_demo_app import denoise_speech
-import torchaudio
-import gradio as gr
 from scipy.io import wavfile
-# import numpy as np
-# import torchaudio
-# import transformers
-# import spaces
-# from huggingface_hub import hf_hub_download
-
-# fe_path = hf_hub_download("sarulab-speech/sidon-v0.1", filename="feature_extractor_cuda.pt")
-# decoder_path = hf_hub_download("sarulab-speech/sidon-v0.1", filename="decoder_cuda.pt")
-# preprocessor =  transformers.SeamlessM4TFeatureExtractor.from_pretrained(
-#     "facebook/w2v-bert-2.0",
-# )
-
-# @spaces.GPU
-# def denoise_speech(audio, fe, decoder):
-#     if audio is None:
-#         return None
-
-#     waveform, sample_rate = audio
-#     #print("sample_rate",sample_rate)
-#     #print("waveform",waveform)
-#     waveform = 0.9 * (waveform / np.abs(waveform).max())
-#     target_n_samples = int(48_000/sample_rate* waveform.shape[0])
-#     # Ensure waveform is a tensor
-#     if not isinstance(waveform, torch.Tensor):
-#         waveform = torch.tensor(waveform, dtype=torch.float32)
-
-#     # If stereo, convert to mono
-#     if waveform.ndim > 1 and waveform.shape[0] > 1:
-#         waveform = torch.mean(waveform, dim=1)
-
-#     # Add a batch dimension
-#     waveform = waveform.view(1, -1)
-#     wav = torchaudio.functional.highpass_biquad(waveform, sample_rate, 50)
-#     wav_16k = torchaudio.functional.resample(wav, sample_rate, 16_000)
-#     restoreds = []
-#     feature_cache = None
-#     wav_16k = torch.nn.functional.pad(wav_16k,(0,24000))
-#     for chunk in wav_16k.view(-1).split(16000 * 60):
-#         inputs = preprocessor(
-#             torch.nn.functional.pad(chunk, (40, 40)), return_tensors="pt",
-#         ).to('cuda')
-#         with torch.inference_mode():
-#             feature = fe(inputs["input_features"].to("cuda"))["last_hidden_state"]
-#             if feature_cache is not None:
-#                 feature = torch.cat([feature_cache, feature], dim=1)
-#                 restored_wav = decoder(feature.transpose(1, 2))
-#                 restored_wav = restored_wav[:, :, 4800:]
-#             else:
-#                 restored_wav = decoder(feature.transpose(1, 2))
-#                 restored_wav = restored_wav[:, :, 50 * 3 :]
-#             feature_cache = feature[:, -5:, :]
-#         restoreds.append(restored_wav.cpu())
-#     restored_wav = torch.cat(restoreds, dim=-1)
-#     return 48_000, (restored_wav.view(-1, 1).numpy() * 32767).astype(np.int16)[:target_n_samples]
+def get_non_silent_audio_from_wavs(wav_filepath_list, min_silence_len=1250, silence_thresh=-60):
+    """Remove silent audio from list of wave filepaths of wavs together. Return AudioSegement."""
+    all_audio_segments = None
+    for wav in wav_filepath_list:
+        raw_audio_segment = pydub.AudioSegment.from_wav(wav)
+        # remove silence
+        this_audio_segment = pydub.AudioSegment.empty()
+        for (start_time, end_time) in pydub.silence.detect_nonsilent(raw_audio_segment, min_silence_len=min_silence_len, silence_thresh=silence_thresh):
+            this_audio_segment += raw_audio_segment[start_time:end_time]
+        if all_audio_segments is None:
+            all_audio_segments = this_audio_segment
+        else:
+            all_audio_segments = all_audio_segments+this_audio_segment
+    return all_audio_segments
 
 def parse_epub():
     parser = argparse.ArgumentParser(description="Parse an EPUB file into an array of chapters")
@@ -160,30 +118,28 @@ def parse_epub():
         4: "en-Frank_man",#"en-Alice_woman"
     }
     validation_model = WhisperModel("tiny.en")
+    # Re-initialize the processor for a new voice
+    tts_model = VibeVoiceForConditionalGenerationInference.from_pretrained(
+        model_path, # model_path 
+        torch_dtype=torch.bfloat16,
+        device_map=target_device,
+        attn_implementation="flash_attention_2",
+    )
+    tts_model.set_ddpm_inference_steps(num_steps=13)
+    cfg_scale=1.85
+    processor = VibeVoiceProcessor.from_pretrained(model_path)
     for i, chapter in enumerate(chapters):
-        if i==0:
-            continue
-        #print(f"\n--- Chapter {i+1} ---")
         if args.by_chapter:
-            for voice_idx in voices_map.keys(): # reversed()
-                # Re-initialize the processor for a new voice
-                tts_model = VibeVoiceForConditionalGenerationInference.from_pretrained(
-                    model_path, # model_path 
-                    torch_dtype=torch.bfloat16,
-                    device_map=target_device,
-                    attn_implementation="flash_attention_2",
-                )
+            for voice_idx in reversed(voices_map.keys()): # reversed()
                 tts_model.eval()
-                tts_model.set_ddpm_inference_steps(num_steps=10)
-                processor = VibeVoiceProcessor.from_pretrained(model_path)
                 for j, chapter_obj in enumerate(chapter):
                     if voice_idx != speaker_map[chapter_obj.get_speaker()]:
                         continue # skip if its a different voice
-                    full_script="Speaker 1: "+str(chapter_obj.text)+str("        .\n")
+                    full_script="Speaker 1: "+str(chapter_obj.text[0].upper()+chapter_obj.text[1:])+str(".... go.")
                     ratio = 0.0
                     max_ratio = 0.0
                     retries = 0
-                    while ratio < 0.9 and retries < 3:
+                    while ratio < 0.9 and retries < 5:
                         # Prepare inputs for the model
                         voice_used = voices_map[voice_idx]
                         inputs = processor(
@@ -200,7 +156,7 @@ def parse_epub():
                         outputs = tts_model.generate(
                             **inputs,
                             max_new_tokens=None,
-                            cfg_scale=1.4,#cfg_scale
+                            cfg_scale=cfg_scale,
                             tokenizer=processor.tokenizer,
                             generation_config={'do_sample': False},
                             verbose=False,
@@ -233,19 +189,15 @@ def parse_epub():
                             time.sleep(2) # make sure the file is closed by the time we rename it
                             os.rename(f"./chapters/chapter_{str(i).zfill(2)}.{str(j).zfill(4)}.tmp.wav",
                                     f"./chapters/chapter_{str(i).zfill(2)}.{str(j).zfill(4)}.wav")
-                        print(str(j).zfill(4),", Attempt: ", retries+1, ", Ratio: ", int(ratio*100), "Voice: ", voice_used, full_script[:50])
+                        print(str(j).zfill(4),", Attempt: ", retries+1, ", Ratio: ", int(ratio*100), "Voice: ", voice_used, full_script)
                         # input_ids', 'attention_mask', 'speech_input_mask', 'speech_tensors', 'speech_masks', 'parsed_scripts', 'all_speakers_list'
                         retries+=1
                     if os.path.exists(f"./chapters/chapter_{str(i).zfill(2)}.{str(j).zfill(4)}.tmp.wav"):
                         os.unlink(f"./chapters/chapter_{str(i).zfill(2)}.{str(j).zfill(4)}.tmp.wav")
-            wavs = glob.glob(f"./chapters/chapter_*.*.wav")
-            combo = None
-            for wav in wavs:
-                if combo is None:
-                    combo = pydub.AudioSegment.from_wav(wav)
-                else:
-                    combo = combo+pydub.AudioSegment.from_wav(wav)
-            combo.export(f"./chapters/chapter_{str(i).zfill(2)}.mp3", format="mp3")
+                    # break# chapter_obj
+            wavs = glob.glob(f"./chapters/chapter_{str(i).zfill(2)}.*.wav")
+            audio = get_non_silent_audio_from_wavs(wavs)
+            audio.export(f"./chapters/chapter_{str(i).zfill(2)}.mp3", format="mp3")
             # remove the wav files
             [os.unlink(x) for x in wavs]
             # break # chapters

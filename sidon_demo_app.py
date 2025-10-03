@@ -11,11 +11,11 @@ decoder_path = hf_hub_download("sarulab-speech/sidon-v0.1", filename="decoder_cu
 preprocessor =  transformers.SeamlessM4TFeatureExtractor.from_pretrained(
     "facebook/w2v-bert-2.0",
 )
+fe = torch.jit.load(fe_path,map_location='cuda').to('cuda')
+decoder = torch.jit.load(decoder_path,map_location='cuda').to('cuda')
 
 @spaces.GPU
 def denoise_speech(audio):
-    fe = torch.jit.load(fe_path,map_location='cuda').to('cuda')
-    decoder = torch.jit.load(decoder_path,map_location='cuda').to('cuda')
 
     if audio is None:
         return None
