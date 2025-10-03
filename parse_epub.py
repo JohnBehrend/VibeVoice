@@ -6,7 +6,9 @@ Simple Python script to parse an EPUB file into an array of chapters.
 import argparse
 import sys
 import os
-from parse_chapter import valid_context_list, invalid_speaker_list
+import time
+
+from parse_chapter import valid_context_list, invalid_speaker_list, speaker_map
 from parse_chapter import same_speaker_tokens, parse_epub_to_chapters
 
 # Text to speach generation
@@ -103,22 +105,29 @@ def parse_epub():
 
     if hasattr(tts_model.model, 'language_model'):
        print(f"Language model attention: {tts_model.model.language_model.config._attn_implementation}")
-
+    voices_map = {
+        1: "en-John_man",
+        2: "en-Jeff_man",
+        3: "en-Alice_woman",
+        4: "en-Travis_man"
+    }
     validation_model = WhisperModel("tiny.en")
     for i, chapter in enumerate(chapters):
+        if i==0:
+            continue
         #print(f"\n--- Chapter {i+1} ---")
         if args.by_chapter:
             for j, chapter_obj in enumerate(chapter):
-                full_script=str(chapter_obj)
+                full_script="Speaker 1: "+str(chapter_obj.text)
                 ratio = 0.0
                 max_ratio = 0.0
                 retries = 0
                 while ratio < 0.82 and retries < 10:
                     # Prepare inputs for the model
+                    voice_used = voices_map[speaker_map[chapter_obj.get_speaker()]]
                     inputs = processor(
                         text=[full_script], # Wrap in list for batch processing
-                        voice_samples=[voice_mapper.get_voice_path(speaker_name) for speaker_name in 
-                                    ["en-John_man","en-Jeff_man","en-Alice_woman","en-Travis_man"]], # Wrap in list for batch processing
+                        voice_samples=[voice_mapper.get_voice_path(voice_used)],
                         padding=True,
                         return_tensors="pt",
                         return_attention_mask=True,
@@ -147,14 +156,16 @@ def parse_epub():
                     input_string = chapter_obj.text
                     detected_string = "\n".join([str(x.text) for x in segments])
 
-                    ratio = SequenceMatcher(None, input_string.lower(), detected_string.lower()).ratio()
+                    ratio = SequenceMatcher(None, input_string.lower(), detected_string.lower()).quick_ratio() # quick ratio doesn't care about oder just set match
                     if ratio > max_ratio:
                         max_ratio = ratio
                         if os.path.exists( f"./chapters/chapter_{str(i).zfill(2)}.{str(j).zfill(4)}.wav"):
                             os.unlink(f"./chapters/chapter_{str(i).zfill(2)}.{str(j).zfill(4)}.wav")
+                        time.sleep(2) # make sure the file is closed by the time we rename it
                         os.rename(f"./chapters/chapter_{str(i).zfill(2)}.{str(j).zfill(4)}.tmp.wav",
                                    f"./chapters/chapter_{str(i).zfill(2)}.{str(j).zfill(4)}.wav")
-                    print(str(j).zfill(4),", Attempt: ", retries+1, ", Ratio: ", ratio)
+                    print(str(j).zfill(4),", Attempt: ", retries+1, ", Ratio: ", ratio, "Voice: ", voice_used,"Input speaker list: ", inputs["all_speakers_list"])
+                    # input_ids', 'attention_mask', 'speech_input_mask', 'speech_tensors', 'speech_masks', 'parsed_scripts', 'all_speakers_list'
                     retries+=1
                 if os.path.exists(f"./chapters/chapter_{str(i).zfill(2)}.{str(j).zfill(4)}.tmp.wav"):
                     os.unlink(f"./chapters/chapter_{str(i).zfill(2)}.{str(j).zfill(4)}.tmp.wav")
