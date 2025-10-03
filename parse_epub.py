@@ -138,8 +138,14 @@ def parse_epub():
                         continue # skip if its a different voice
 
                     full_script="Speaker 1: "+str(chapter_obj.text[0].upper()+chapter_obj.text[1:])
-                    if full_script.endswith("."):
+                    if full_script.endswith("..."):
+                        pass
+                    elif full_script.endswith("."):
                         full_script+=".."
+                    elif full_script.endswith(","):
+                        full_script=full_script[0:-1]+"..."
+                    elif full_script.endswith(" "):
+                        full_script+="..."
                     else:
                         full_script+=" ..."
                     ratio = 0.0
