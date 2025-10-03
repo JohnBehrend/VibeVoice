@@ -157,7 +157,7 @@ def parse_epub():
         1: "en-Travis_man",
         2: "en-John_man",
         3: "en-Rosumand_woman",
-        4: "en-Jeff_man",#"en-Alice_woman"
+        4: "en-Frank_man",#"en-Alice_woman"
     }
     validation_model = WhisperModel("tiny.en")
     for i, chapter in enumerate(chapters):
@@ -179,7 +179,7 @@ def parse_epub():
                 for j, chapter_obj in enumerate(chapter):
                     if voice_idx != speaker_map[chapter_obj.get_speaker()]:
                         continue # skip if its a different voice
-                    full_script="Speaker 1: "+str(chapter_obj.text)
+                    full_script="Speaker 1: "+str(chapter_obj.text)+str("        .\n")
                     ratio = 0.0
                     max_ratio = 0.0
                     retries = 0
@@ -233,7 +233,7 @@ def parse_epub():
                             time.sleep(2) # make sure the file is closed by the time we rename it
                             os.rename(f"./chapters/chapter_{str(i).zfill(2)}.{str(j).zfill(4)}.tmp.wav",
                                     f"./chapters/chapter_{str(i).zfill(2)}.{str(j).zfill(4)}.wav")
-                        print(str(j).zfill(4),", Attempt: ", retries+1, ", Ratio: ", ratio, "Voice: ", voice_used,"Input speaker list: ", inputs["all_speakers_list"])
+                        print(str(j).zfill(4),", Attempt: ", retries+1, ", Ratio: ", int(ratio*100), "Voice: ", voice_used, full_script[:50])
                         # input_ids', 'attention_mask', 'speech_input_mask', 'speech_tensors', 'speech_masks', 'parsed_scripts', 'all_speakers_list'
                         retries+=1
                     if os.path.exists(f"./chapters/chapter_{str(i).zfill(2)}.{str(j).zfill(4)}.tmp.wav"):
