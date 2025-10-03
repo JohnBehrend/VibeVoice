@@ -25,6 +25,66 @@ from faster_whisper import WhisperModel
 import glob
 import pydub
 
+# Filter audio files
+from sidon_demo_app import denoise_speech
+import torchaudio
+import gradio as gr
+from scipy.io import wavfile
+# import numpy as np
+# import torchaudio
+# import transformers
+# import spaces
+# from huggingface_hub import hf_hub_download
+
+# fe_path = hf_hub_download("sarulab-speech/sidon-v0.1", filename="feature_extractor_cuda.pt")
+# decoder_path = hf_hub_download("sarulab-speech/sidon-v0.1", filename="decoder_cuda.pt")
+# preprocessor =  transformers.SeamlessM4TFeatureExtractor.from_pretrained(
+#     "facebook/w2v-bert-2.0",
+# )
+
+# @spaces.GPU
+# def denoise_speech(audio, fe, decoder):
+#     if audio is None:
+#         return None
+
+#     waveform, sample_rate = audio
+#     #print("sample_rate",sample_rate)
+#     #print("waveform",waveform)
+#     waveform = 0.9 * (waveform / np.abs(waveform).max())
+#     target_n_samples = int(48_000/sample_rate* waveform.shape[0])
+#     # Ensure waveform is a tensor
+#     if not isinstance(waveform, torch.Tensor):
+#         waveform = torch.tensor(waveform, dtype=torch.float32)
+
+#     # If stereo, convert to mono
+#     if waveform.ndim > 1 and waveform.shape[0] > 1:
+#         waveform = torch.mean(waveform, dim=1)
+
+#     # Add a batch dimension
+#     waveform = waveform.view(1, -1)
+#     wav = torchaudio.functional.highpass_biquad(waveform, sample_rate, 50)
+#     wav_16k = torchaudio.functional.resample(wav, sample_rate, 16_000)
+#     restoreds = []
+#     feature_cache = None
+#     wav_16k = torch.nn.functional.pad(wav_16k,(0,24000))
+#     for chunk in wav_16k.view(-1).split(16000 * 60):
+#         inputs = preprocessor(
+#             torch.nn.functional.pad(chunk, (40, 40)), return_tensors="pt",
+#         ).to('cuda')
+#         with torch.inference_mode():
+#             feature = fe(inputs["input_features"].to("cuda"))["last_hidden_state"]
+#             if feature_cache is not None:
+#                 feature = torch.cat([feature_cache, feature], dim=1)
+#                 restored_wav = decoder(feature.transpose(1, 2))
+#                 restored_wav = restored_wav[:, :, 4800:]
+#             else:
+#                 restored_wav = decoder(feature.transpose(1, 2))
+#                 restored_wav = restored_wav[:, :, 50 * 3 :]
+#             feature_cache = feature[:, -5:, :]
+#         restoreds.append(restored_wav.cpu())
+#     restored_wav = torch.cat(restoreds, dim=-1)
+#     return 48_000, (restored_wav.view(-1, 1).numpy() * 32767).astype(np.int16)[:target_n_samples]
+
 def parse_epub():
     parser = argparse.ArgumentParser(description="Parse an EPUB file into an array of chapters")
     parser.add_argument("epub_file", help="Path to the EPUB file")
@@ -93,23 +153,11 @@ def parse_epub():
 
     target_device="cuda"
     model_path="Jmica/VibeVoice7B"#"microsoft/VibeVoice-1.5B"
-    tts_model = VibeVoiceForConditionalGenerationInference.from_pretrained(
-        model_path, # model_path 
-        torch_dtype=torch.bfloat16,
-        device_map=target_device,
-        attn_implementation="flash_attention_2",
-    )
-    tts_model.eval()
-    tts_model.set_ddpm_inference_steps(num_steps=10)
-    processor = VibeVoiceProcessor.from_pretrained(model_path)
-
-    if hasattr(tts_model.model, 'language_model'):
-       print(f"Language model attention: {tts_model.model.language_model.config._attn_implementation}")
     voices_map = {
-        1: "en-John_man",
-        2: "en-Jeff_man",
-        3: "en-Alice_woman",
-        4: "en-Travis_man"
+        1: "en-Travis_man",
+        2: "en-John_man",
+        3: "en-Rosumand_woman",
+        4: "en-Jeff_man",#"en-Alice_woman"
     }
     validation_model = WhisperModel("tiny.en")
     for i, chapter in enumerate(chapters):
@@ -117,58 +165,79 @@ def parse_epub():
             continue
         #print(f"\n--- Chapter {i+1} ---")
         if args.by_chapter:
-            for j, chapter_obj in enumerate(chapter):
-                full_script="Speaker 1: "+str(chapter_obj.text)
-                ratio = 0.0
-                max_ratio = 0.0
-                retries = 0
-                while ratio < 0.82 and retries < 10:
-                    # Prepare inputs for the model
-                    voice_used = voices_map[speaker_map[chapter_obj.get_speaker()]]
-                    inputs = processor(
-                        text=[full_script], # Wrap in list for batch processing
-                        voice_samples=[voice_mapper.get_voice_path(voice_used)],
-                        padding=True,
-                        return_tensors="pt",
-                        return_attention_mask=True,
-                    )
-                    for k, v in inputs.items():
-                        if torch.is_tensor(v):
-                            inputs[k] = v.to(target_device)
+            for voice_idx in reversed(voices_map.keys()):
+                # Re-initialize the processor for a new voice
+                tts_model = VibeVoiceForConditionalGenerationInference.from_pretrained(
+                    model_path, # model_path 
+                    torch_dtype=torch.bfloat16,
+                    device_map=target_device,
+                    attn_implementation="flash_attention_2",
+                )
+                tts_model.eval()
+                tts_model.set_ddpm_inference_steps(num_steps=10)
+                processor = VibeVoiceProcessor.from_pretrained(model_path)
+                for j, chapter_obj in enumerate(chapter):
+                    if voice_idx != speaker_map[chapter_obj.get_speaker()]:
+                        continue # skip if its a different voice
+                    full_script="Speaker 1: "+str(chapter_obj.text)
+                    ratio = 0.0
+                    max_ratio = 0.0
+                    retries = 0
+                    while ratio < 0.9 and retries < 10:
+                        # Prepare inputs for the model
+                        voice_used = voices_map[voice_idx]
+                        inputs = processor(
+                            text=[full_script], # Wrap in list for batch processing
+                            voice_samples=[voice_mapper.get_voice_path(voice_used)],
+                            padding=True,
+                            return_tensors="pt",
+                            return_attention_mask=True,
+                        )
+                        for k, v in inputs.items():
+                            if torch.is_tensor(v):
+                                inputs[k] = v.to(target_device)
 
-                    outputs = tts_model.generate(
-                        **inputs,
-                        max_new_tokens=None,
-                        cfg_scale=1.4,#cfg_scale
-                        tokenizer=processor.tokenizer,
-                        generation_config={'do_sample': False},
-                        verbose=False,
-                    )
+                        outputs = tts_model.generate(
+                            **inputs,
+                            max_new_tokens=None,
+                            cfg_scale=1.4,#cfg_scale
+                            tokenizer=processor.tokenizer,
+                            generation_config={'do_sample': False},
+                            verbose=False,
+                        )
 
-                    # Save output (processor handles device internally)
-                    output_path = f"./chapters/chapter_{str(i).zfill(2)}.{str(j).zfill(4)}.tmp.wav"            
-                    processor.save_audio(
-                        outputs.speech_outputs[0], # First (and only) batch item
-                        output_path=output_path,
-                    )
-                    #print(f"Saved output to {output_path}")
-                    segments, info = validation_model.transcribe(f"./chapters/chapter_{str(i).zfill(2)}.{str(j).zfill(4)}.tmp.wav")
-                    input_string = chapter_obj.text
-                    detected_string = "\n".join([str(x.text) for x in segments])
+                        # Save output (processor handles device internally)
+                        output_path = f"./chapters/chapter_{str(i).zfill(2)}.{str(j).zfill(4)}.tmp.wav"            
+                        processor.save_audio(
+                            outputs.speech_outputs[0], # First (and only) batch item
+                            output_path=output_path,
+                        )
 
-                    ratio = SequenceMatcher(None, input_string.lower(), detected_string.lower()).quick_ratio() # quick ratio doesn't care about oder just set match
-                    if ratio > max_ratio:
-                        max_ratio = ratio
-                        if os.path.exists( f"./chapters/chapter_{str(i).zfill(2)}.{str(j).zfill(4)}.wav"):
-                            os.unlink(f"./chapters/chapter_{str(i).zfill(2)}.{str(j).zfill(4)}.wav")
-                        time.sleep(2) # make sure the file is closed by the time we rename it
-                        os.rename(f"./chapters/chapter_{str(i).zfill(2)}.{str(j).zfill(4)}.tmp.wav",
-                                   f"./chapters/chapter_{str(i).zfill(2)}.{str(j).zfill(4)}.wav")
-                    print(str(j).zfill(4),", Attempt: ", retries+1, ", Ratio: ", ratio, "Voice: ", voice_used,"Input speaker list: ", inputs["all_speakers_list"])
-                    # input_ids', 'attention_mask', 'speech_input_mask', 'speech_tensors', 'speech_masks', 'parsed_scripts', 'all_speakers_list'
-                    retries+=1
-                if os.path.exists(f"./chapters/chapter_{str(i).zfill(2)}.{str(j).zfill(4)}.tmp.wav"):
-                    os.unlink(f"./chapters/chapter_{str(i).zfill(2)}.{str(j).zfill(4)}.tmp.wav")
+                        # send through a cleaning ML algo
+                        sample_rate, waveform = wavfile.read(output_path)
+                        sample_rate, waveform = denoise_speech((sample_rate,waveform))
+                        wavfile.write(output_path, sample_rate, waveform)
+
+                        # remove long silences after filtering
+
+                        #print(f"Saved output to {output_path}")
+                        segments, info = validation_model.transcribe(f"./chapters/chapter_{str(i).zfill(2)}.{str(j).zfill(4)}.tmp.wav")
+                        input_string = chapter_obj.text
+                        detected_string = "\n".join([str(x.text) for x in segments])
+
+                        ratio = SequenceMatcher(None, input_string.lower(), detected_string.lower()).quick_ratio() # quick ratio doesn't care about oder just set match
+                        if ratio > max_ratio:
+                            max_ratio = ratio
+                            if os.path.exists( f"./chapters/chapter_{str(i).zfill(2)}.{str(j).zfill(4)}.wav"):
+                                os.unlink(f"./chapters/chapter_{str(i).zfill(2)}.{str(j).zfill(4)}.wav")
+                            time.sleep(2) # make sure the file is closed by the time we rename it
+                            os.rename(f"./chapters/chapter_{str(i).zfill(2)}.{str(j).zfill(4)}.tmp.wav",
+                                    f"./chapters/chapter_{str(i).zfill(2)}.{str(j).zfill(4)}.wav")
+                        print(str(j).zfill(4),", Attempt: ", retries+1, ", Ratio: ", ratio, "Voice: ", voice_used,"Input speaker list: ", inputs["all_speakers_list"])
+                        # input_ids', 'attention_mask', 'speech_input_mask', 'speech_tensors', 'speech_masks', 'parsed_scripts', 'all_speakers_list'
+                        retries+=1
+                    if os.path.exists(f"./chapters/chapter_{str(i).zfill(2)}.{str(j).zfill(4)}.tmp.wav"):
+                        os.unlink(f"./chapters/chapter_{str(i).zfill(2)}.{str(j).zfill(4)}.tmp.wav")
             wavs = glob.glob(f"./chapters/chapter_*.*.wav")
             combo = None
             for wav in wavs:

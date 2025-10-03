@@ -38,6 +38,8 @@ dependencies = [
     "ebooklib>=0.19",
     "beautifulsoup4>=4.13.5",
     "pydub>=0.25.1",
+    "torchaudio>=2.7.1",
+    "spaces>=0.42.1",
 ]
 
 
