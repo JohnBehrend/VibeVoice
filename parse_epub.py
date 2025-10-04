@@ -136,7 +136,7 @@ def parse_epub():
                 for j, chapter_obj in enumerate(chapter):
                     if voice_idx != speaker_map[chapter_obj.get_speaker()]:
                         continue # skip if its a different voice
-
+                    # TODO: for longer text, break up by ". " if possible. Can have fullscript actually be a list maybe?
                     full_script="Speaker 1: "+str(chapter_obj.text[0].upper()+chapter_obj.text[1:])
                     if full_script.endswith("..."):
                         pass
@@ -145,7 +145,13 @@ def parse_epub():
                     elif full_script.endswith(","):
                         full_script=full_script[0:-1]+"..."
                     elif full_script.endswith(" "):
-                        full_script+="..."
+                        full_script=full_script[0:-1]+"..."
+                    elif full_script.endswith(", "):
+                        full_script=full_script[0:-2]+"..."
+                    elif full_script.endswith(":"):
+                        full_script=full_script[0:-1]+"..."
+                    elif full_script.endswith(": "):
+                        full_script=full_script[0:-2]+"..."
                     else:
                         full_script+=" ..."
                     ratio = 0.0
