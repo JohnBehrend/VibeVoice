@@ -48,6 +48,7 @@ def parse_epub():
     parser.add_argument("epub_file", help="Path to the EPUB file")
     parser.add_argument("--speaker_histogram", action="store_true", help="Print out a histogram of speakers.")
     parser.add_argument("--by_chapter", action="store_true", help="Save a file per chapter in a new folder labled chapters")
+    parser.add_argument("--resume",action="store_true", help="Try to resume crunching in the directory based on files present.")
     args = parser.parse_args()
     
     # Parse the EPUB file
@@ -129,13 +130,27 @@ def parse_epub():
     cfg_scale=1.85
     processor = VibeVoiceProcessor.from_pretrained(model_path)
     end_map={".":"..", "?": "?...",",":"..."}
+    still_skip=True
     for i, chapter in enumerate(chapters):
+        if args.resume:
+            if os.path.exists(f"./chapters/chapter_{str(i).zfill(2)}.mp3"):
+                print(f"Skipping chapter {str(i).zfill(2)}.",end="\r")
+                continue
         if args.by_chapter:
             for voice_idx in reversed(voices_map.keys()): # reversed()
                 tts_model.eval()
+                if args.resume:
+                    already_generated = [int(x.split(".")[-2]) for x in glob.glob(f"./chapters/chapter_{str(i).zfill(2)}.*.wav" ) if not x.endswith(".tmp.wav")]
                 for j, chapter_obj in enumerate(chapter):
                     if voice_idx != speaker_map[chapter_obj.get_speaker()]:
                         continue # skip if its a different voice
+                    if still_skip:
+                        if j not in already_generated:
+                            still_skip=False # Found point to resume from
+                            print(f"\nResuming with chapter {i}.{j}.")
+                        else:
+                            print(f"Skipping chapter {str(i).zfill(2)}.{str(j).zfill(4)}", end="\r")
+                            continue
                     # TODO: for longer text, break up by ". " if possible. Can have fullscript actually be a list maybe?
                     full_script="Speaker 1: "+str(chapter_obj.text[0].upper()+chapter_obj.text[1:])
                     if full_script.endswith("..."):
