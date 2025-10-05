@@ -28,6 +28,10 @@ import pydub
 # Filter audio files
 from sidon_demo_app import denoise_speech
 from scipy.io import wavfile
+
+# garbage collection
+import gc
+
 def get_non_silent_audio_from_wavs(wav_filepath_list, min_silence_len=1250, silence_thresh=-60):
     """Remove silent audio from list of wave filepaths of wavs together. Return AudioSegement."""
     all_audio_segments = None
@@ -111,7 +115,7 @@ def parse_epub():
     voice_mapper = VoiceMapper()
 
     target_device="cuda"
-    model_path="Jmica/VibeVoice7B"#"microsoft/VibeVoice-1.5B"
+    model_path="Jmica/VibeVoice7B"#"FabioSarracino/VibeVoice-Large-Q8""microsoft/VibeVoice-1.5B"
     voices_map = {
         1: "en-Travis_man",
         2: "en-John_man",
@@ -127,6 +131,7 @@ def parse_epub():
         attn_implementation="flash_attention_2",
     )
     tts_model.set_ddpm_inference_steps(num_steps=13)
+    tts_model.eval()
     cfg_scale=1.85
     processor = VibeVoiceProcessor.from_pretrained(model_path)
     end_map={".":"..", "?": "?...",",":"..."}
@@ -138,7 +143,6 @@ def parse_epub():
                 continue
         if args.by_chapter:
             for voice_idx in reversed(voices_map.keys()): # reversed()
-                tts_model.eval()
                 if args.resume:
                     already_generated = [int(x.split(".")[-2]) for x in glob.glob(f"./chapters/chapter_{str(i).zfill(2)}.*.wav" ) if not x.endswith(".tmp.wav")]
                 for j, chapter_obj in enumerate(chapter):
@@ -191,7 +195,7 @@ def parse_epub():
                             max_new_tokens=None,
                             cfg_scale=cfg_scale,
                             tokenizer=processor.tokenizer,
-                            generation_config={'do_sample': False},
+                            do_sample=False,
                             verbose=False,
                         )
 
@@ -201,6 +205,14 @@ def parse_epub():
                             outputs.speech_outputs[0], # First (and only) batch item
                             output_path=output_path,
                         )
+                        del inputs
+                        del outputs
+                        # Explicitly collect garbage (optional, but can help)
+                        gc.collect()
+
+                        # Clear the CUDA memory cache
+                        torch.cuda.empty_cache()
+                        #torch.cuda.synchronize()
 
                         # send through a cleaning ML algo
                         sample_rate, waveform = wavfile.read(output_path)
