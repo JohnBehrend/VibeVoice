@@ -10,6 +10,7 @@ fe_path = hf_hub_download("sarulab-speech/sidon-v0.1", filename="feature_extract
 decoder_path = hf_hub_download("sarulab-speech/sidon-v0.1", filename="decoder_cuda.pt")
 preprocessor =  transformers.SeamlessM4TFeatureExtractor.from_pretrained(
     "facebook/w2v-bert-2.0",
+    sampling_rate=16_000,
 )
 fe = torch.jit.load(fe_path,map_location='cuda').to('cuda')
 decoder = torch.jit.load(decoder_path,map_location='cuda').to('cuda')
