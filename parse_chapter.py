@@ -5,6 +5,7 @@ Module to parse chapter content and return chapter objects.
 import ebooklib
 from ebooklib import epub
 from bs4 import BeautifulSoup
+import argparse
 
 invalid_speaker_list = [
     "Sedai",
@@ -894,3 +895,43 @@ def parse_epub_to_chapters(epub_path):
     except Exception as e:
         print(f"Error parsing EPUB file: {e}")
         return []
+
+def cleanup_text(txt):
+    # if txt.endswith("..."):
+    #     pass
+    # elif txt.endswith("."):
+    #     txt+=".."
+    # elif txt.endswith(","):
+    #     txt=txt[0:-1]+"..."
+    # elif txt.endswith(" "):
+    #     txt=txt[0:-1]+"..."
+    # elif txt.endswith(", "):
+    #     txt=txt[0:-2]+"..."
+    # elif txt.endswith(":"):
+    #     txt=txt[0:-1]+"..."
+    # elif txt.endswith(": "):
+    #     txt=txt[0:-2]+"..."
+    # else:
+    #     txt+=" ..."
+    txt = txt.replace("   ", " ")
+    txt = txt.replace("  ", " ")
+    
+    return txt
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Convert an epub file into text files for each character. Quotes will always be split into unique lines.")
+    parser.add_argument("-epub_file", help="Path to the EPUB file")
+    args = parser.parse_args()
+    chapters = parse_epub_to_chapters(args.epub_file)
+    for i, chapter in enumerate(chapters):
+        line_num=0
+        with open(f"./chapters/chapter_{i}.txt","w") as f:
+            for cobj in chapter:
+                line_num=line_num+1
+                f.write(f"Line {line_num}: ")
+                if cobj.has_quotes:
+                    f.write('"')
+                f.write(cleanup_text(cobj.text))
+                if cobj.has_quotes:
+                    f.write('"')
+                f.write("\r\n")
