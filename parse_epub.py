@@ -126,7 +126,7 @@ def parse_epub():
         3: "en-Rosumand_woman",
         4: "en-Rosumand_woman",#"en-Alice_woman"
     }
-    validation_model = WhisperModel("tiny.en", device=target_device)
+    validation_model = WhisperModel("tiny.en")
     # Re-initialize the processor for a new voice
     tts_model = VibeVoiceForConditionalGenerationInference.from_pretrained(
         model_path, # model_path 
