@@ -183,3 +183,8 @@ tags
 /checkpoints/
 exp
 .gradio/
+
+unsloth_compiled_cache/*.py
+chapters/
+Books/
+uv.lock
