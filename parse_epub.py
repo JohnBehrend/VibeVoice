@@ -149,6 +149,8 @@ def parse_epub():
             for voice_idx in reversed(voices_map.keys()): # reversed()
                 if args.resume:
                     already_generated = [int(x.split(".")[-2]) for x in glob.glob(f"./chapters/chapter_{str(i).zfill(2)}.*.wav" ) if not x.endswith(".tmp.wav")]
+                else:
+                    already_generated = []
                 for j, chapter_obj in enumerate(chapter):
                     if voice_idx != speaker_map[chapter_obj.get_speaker()]:
                         continue # skip if its a different voice
