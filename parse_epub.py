@@ -53,6 +53,7 @@ def parse_epub():
     parser.add_argument("--speaker_histogram", action="store_true", help="Print out a histogram of speakers.")
     parser.add_argument("--by_chapter", action="store_true", help="Save a file per chapter in a new folder labled chapters")
     parser.add_argument("--resume",action="store_true", help="Try to resume crunching in the directory based on files present.")
+    parser.add_argument("--alt_gpu",action="store_true", help="Use other gpu for processing.")
     args = parser.parse_args()
     
     # Parse the EPUB file
@@ -114,13 +115,16 @@ def parse_epub():
     os.makedirs("./chapters", exist_ok=True)
     voice_mapper = VoiceMapper()
 
-    target_device="cuda"
+    target_device="cuda:1"
+    if args.alt_gpu:
+        target_device="cuda:0"
+
     model_path="Jmica/VibeVoice7B"#"FabioSarracino/VibeVoice-Large-Q8""microsoft/VibeVoice-1.5B"
-    voices_map = {
+    voices_map = { # male narrator, femail voices.
         1: "en-Travis_man",
-        2: "en-John_man",
+        2: "en-Rosumand_woman",#,en-John_man",
         3: "en-Rosumand_woman",
-        4: "en-Frank_man",#"en-Alice_woman"
+        4: "en-Rosumand_woman",#"en-Alice_woman"
     }
     validation_model = WhisperModel("tiny.en")
     # Re-initialize the processor for a new voice
