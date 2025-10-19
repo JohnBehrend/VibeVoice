@@ -4,7 +4,9 @@ Module to take a chapter and automate sending through LLM for labeling character
 """
 import argparse
 import os
+import sys
 import json
+from collections import Counter
 from openai import OpenAI
 # from unsloth import FastLanguageModel
 # from transformers import AutoModelForCausalLM, AutoTokenizer
@@ -27,7 +29,6 @@ char_map : {"1": "narrator", "2": "First Character", "3": "Second Character"}
 15:3
 -----
       return character_map, line_map"""
-    char_map_found=False
     line_map = {}
     char_map = {}
     for line in result:
@@ -37,7 +38,7 @@ char_map : {"1": "narrator", "2": "First Character", "3": "Second Character"}
                     this_line, speaker_num = line.split(":")
                     line_map[int(this_line)] = int(speaker_num)
                 except:
-                    print(f"INVALID SPEAKER FORMAT FROM LLM RUN {attempt_num}: {line}")
+                    print(f"INVALID SPEAKER FORMAT FROM LLM RUN {attempt_num}: {line}", file=sys.stderr)
         else:
             if ("char_map" in line) and ("{" in line) and ("}" in line):
                 char_map = json.loads("{" + line.split("{")[1])
@@ -46,6 +47,25 @@ char_map : {"1": "narrator", "2": "First Character", "3": "Second Character"}
                     
     return char_map, line_map
 
+def merge_line_maps(line_maps, verbose=False):
+    """Take multiple line maps and determine the most commont mapping for each line.
+    If there is only one value for a line, we will pick that value.
+    If there are two values for a line, we'll pick the first.
+    If there more than two values for a line pick the majority. If all different pick first.
+    """
+    merged_line_map = {}# line_maps[0].copy()
+    if len(line_maps)>0:
+        for line_map in line_maps:
+            for line, speaker_num in line_map.items():
+                if not (line in merged_line_map.keys()):
+                    merged_line_map[line] = [speaker_num]
+                else:
+                    merged_line_map[line].append(speaker_num)
+    if verbose:
+        print("Merged Line Map:")
+        print(merged_line_map)
+    return { k: Counter(v).most_common(1)[0][0] for k,v in merged_line_map.items()}
+    
 PROMPT_TXT = """
 Prompt: Audiobook Dialogue Annotation Expert
 
@@ -99,13 +119,14 @@ IMPORTANT:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Label a chapter file by character. Speaker (Narrator) for non quoted lines. Speaker (char_name) for spoken lines.")
     parser.add_argument("-txt_file", help="Path to the EPUB file")
+    parser.add_argument("--verbose", action="store_true", help="Enable verbose printing for debug.")
     parser.add_argument("--skip_llm", action="store_true", help="Skip call to LLM and just try to process files into character maps.")
     parser.add_argument("-num_llm_attempts", type=int, default=5, help="Number of llm attempts submitted.")
     args = parser.parse_args()
     client = OpenAI(base_url="http://localhost:1234/v1", api_key="lm-studio") # api_key can be any string as it's not used by LM Studio
     
     if not os.path.exists(args.txt_file):
-        print("Invalid txt_file. Please specify a valid text file and retry.")
+        print("Invalid txt_file. Please specify a valid text file and retry.", file=sys.stderr)
         exit()
 
     chapter_file_base, _ = os.path.splitext(args.txt_file)
@@ -136,7 +157,7 @@ if __name__ == "__main__":
                 with open(chapter_file_base+f".result.{a}.txt", "w", encoding='utf-8') as f:
                     f.write(result)
             except Exception as e:
-                print(f"An error occurred: {e}")
+                print(f"An error occurred: {e}", file=sys.stderr)
     
     character_maps = []
     line_maps = []
@@ -155,56 +176,17 @@ if __name__ == "__main__":
                     if merged_character_map[k] == v:
                         match=True
                 if not match:
-                    print(f"NO MATCH for run {a}, char_map[{k}] -> {v}. Skipping this run for now. Please resolve and re-run with --skip_llm to recover data.")
+                    print(f"NO MATCH for run {a}, char_map[{k}] -> {v}. Skipping this run for now. Please resolve and re-run with --skip_llm to recover data.", file=sys.stderr)
                     valid_character_map = False
         if valid_character_map:
-            line_maps.append(line_maps)
-    print(merged_character_map)
-    print("line_maps:", len(line_maps))
-    # Now try to resolve mismatches in the maps...
-        # Process the response (for streaming)
-        #     response_lines = []
-        #     still_thinking=True
-        #     thinking_text = ""
-        #     this_chunk=""
-        #     for chunk in completion:
-        #         chunk_text = chunk.choices[0].delta.content
-        #         if chunk_text is None:
-        #             continue
-        #         if "</think>" in chunk_text:
-        #             still_thinking=False
-        #         elif not still_thinking:
-        #             this_chunk = this_chunk+chunk_text
-        #             if "\n" in chunk_text:
-        #                 response_lines.append(this_chunk.strip())
-        #                 this_chunk = ""
-        #         else:
-        #             thinking_text = thinking_text+chunk_text
-        # except Exception as e:
-        #     print(f"An error occurred: {e}")
-        # print(thinking_text)
-        # print("-----------------")
-        # speaker_map = {}
-        # if len(response_lines)>1:
-        #     char_map = response_lines.pop(0)
-        #     print("CHARACTER_MAP", char_map)
-        #     for rline in response_lines:
-        #         tokens = rline.split(":")
-        #         if len(tokens) == 2:
-        #             line, speaker = tokens
-        #             speaker_map[line] = speaker
-        #         else:
-        #             print("INVALID: ", tokens)
-        # print(speaker_map)
-
-        # model, tokenizer = FastLanguageModel.from_pretrained("unsloth/glm-4.5-air-q4")#, load_in_4bit=True
-        # tokenizer = AutoTokenizer.from_pretrained(MODEL_PATH,gguf_file=MODEL_GGUF)
-        # model = AutoModelForCausalLM.from_pretrained(
-        #     MODEL_PATH,
-        #     gguf_file=MODEL_GGUF,
-        #     local_files_only=True,
-        #     # torch_dtype=torch.bfloat16,
-        #     device_map="cuda:1"
-        # )
-
+            line_maps.append(line_map)
+    if args.verbose:
+        print(merged_character_map)
+        print("line_maps:", len(line_maps))
+    merged_line_map = merge_line_maps(line_maps, args.verbose)
+    if args.verbose:
+        print("Overall line map:")
+        print(merged_line_map)
+    with open(chapter_file_base+f".map.json", "w", encoding='utf-8') as f:
+        f.write(json.dumps([merged_character_map, merged_line_map], indent=4))
     exit()
