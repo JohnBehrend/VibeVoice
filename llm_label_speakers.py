@@ -30,9 +30,9 @@ Step-by-Step Instructions:
 - Find ALL lines that start AND end with double quotation marks ("). These will likely have multiple sentences each.
 
 3. Speaker Attribution for Each Line
-- For EACH line number:
--- If the line is not a quote, add a prefix of "Speaker 1". This indicates the speaker is the narrator, our first character.
--- If the line is a quote, add the prefix of "Speaker n" where n is the key for the appropriate character that speaks the quote.
+- For EACH line:
+-- if the line is a quote:
+--- print the line number : followed by n where n is the key for the appropriate character that speaks the quote.
 
 Important Rules:
 - Quote lines are lines that START and END with double quotes.
@@ -43,25 +43,24 @@ Important Rules:
 - Make sure the conversations make sense for sequential text. 
 
 5. Example Output Format:
-- char_map : {1: "narrator", 2:"Name"}
-- Speaker 1: This is a narrator line as it does not start and end with double quotes. The next line is spoken by the character Name.
-- Speaker 2 "This is a the text spoken by Name"
+- char_map : {1: "narrator", 2:"Name", 3:"OtherName"}
+- 2:2
+- 4:3
+- 10:2
+- 11:2
 
 Process:
 - First identify ALL characters and create char_map
 - Print the char_map in JSON format
 - Scan for quoted lines
 - For each quoted line, determine speaker based on context
-- Output all lines in specified format
+- Output line number : speaker number
 
 IMPORTANT:
-- TAKE YOUR TIME AND PRINT ALL LINES! 
+- TAKE YOUR TIME AND PRINT ALL QUOTED LINES! 
 - Print with final format in mind.
-- We have plenty of memory and context!
-- JUST ADD PREFIX BUT DONT ALTER THE ACTUAL TEXT OF THE LINES THEMSELVES! 
-- Do not stop until the full text is fully printed!
+- Do not stop until the full text is processed!
 - Do not summarize, go thought the entire text!
-- Do not say when the task is complete, just stop printing lines.
 """
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Label a chapter file by character. Speaker (Narrator) for non quoted lines. Speaker (char_name) for spoken lines.")
@@ -78,6 +77,7 @@ if __name__ == "__main__":
     [messages.append({"role": "user", "content": x}) for x in lines]
 
     # Send the chat completion request
+    response_lines = []
     try:
         completion = client.chat.completions.create(
             model="local-model",  # Use a placeholder model name or the specific model ID from LM Studio
@@ -86,11 +86,38 @@ if __name__ == "__main__":
             stream=True # Set to True for streaming responses
         )
         # Process the response (for streaming)
+        still_thinking=True
+        thinking_text = ""
+        this_chunk=""
         for chunk in completion:
-            if chunk.choices[0].delta.content:
-                print(chunk.choices[0].delta.content, end="")
+            chunk_text = chunk.choices[0].delta.content
+            if chunk_text is None:
+                continue
+            if "</think>" in chunk_text:
+                still_thinking=False
+            elif not still_thinking:
+                this_chunk = this_chunk+chunk_text
+                if "\n" in chunk_text:
+                    response_lines.append(this_chunk.strip())
+                    this_chunk = ""
+            else:
+                thinking_text = thinking_text+chunk_text
     except Exception as e:
         print(f"An error occurred: {e}")
+    print(thinking_text)
+    print("-----------------")
+    speaker_map = {}
+    if len(response_lines)>1:
+        char_map = response_lines.pop(0)
+        print("CHARACTER_MAP", char_map)
+        for rline in response_lines:
+            tokens = rline.split(":")
+            if len(tokens) == 2:
+                line, speaker = tokens
+                speaker_map[line] = speaker
+            else:
+                print("INVALID: ", tokens)
+    print(speaker_map)
     # model, tokenizer = FastLanguageModel.from_pretrained("unsloth/glm-4.5-air-q4")#, load_in_4bit=True
     # tokenizer = AutoTokenizer.from_pretrained(MODEL_PATH,gguf_file=MODEL_GGUF)
     # model = AutoModelForCausalLM.from_pretrained(
