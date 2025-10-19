@@ -36,7 +36,12 @@ char_map : {"1": "narrator", "2": "First Character", "3": "Second Character"}
             if ":" in line and not (line.startswith("#")):
                 try:
                     this_line, speaker_num = line.split(":")
-                    line_map[int(this_line)] = int(speaker_num)
+                    if "-" in this_line:
+                        line_start, line_stop = this_line.split("-")
+                        for x in range(int(line_start),int(line_stop)+1):
+                            line_map[int(x)] = int(speaker_num)
+                    else:
+                        line_map[int(this_line)] = int(speaker_num)
                 except:
                     print(f"INVALID SPEAKER FORMAT FROM LLM RUN {attempt_num}: {line}", file=sys.stderr)
         else:
