@@ -3,6 +3,8 @@
 Module to take a chapter and automate sending through LLM for labeling characters.
 """
 import argparse
+import os
+import json
 from openai import OpenAI
 # from unsloth import FastLanguageModel
 # from transformers import AutoModelForCausalLM, AutoTokenizer
@@ -13,6 +15,37 @@ from openai import OpenAI
 #""
 #"D:/models/unsloth/GLM-4.5-Air-GGUF"#/#"unsloth/glm-4.5-air-q4"#"unsloth/GLM-4.5-Air-GGUF"#"zai-org/GLM-4.5"
 # /opt/model-storage/GLM-4.5-Air-UD-Q4_K_XL-00001-of-00002.gguf
+
+def interpret_result(result, attempt_num):
+    """Process result of a LLM query of the following format:
+-----
+char_map : {"1": "narrator", "2": "First Character", "3": "Second Character"}
+7:2
+9:2
+11:2
+13:3
+15:3
+-----
+      return character_map, line_map"""
+    char_map_found=False
+    line_map = {}
+    char_map = {}
+    for line in result:
+        if len(char_map) > 0:
+            if ":" in line and not (line.startswith("#")):
+                try:
+                    this_line, speaker_num = line.split(":")
+                    line_map[int(this_line)] = int(speaker_num)
+                except:
+                    print(f"INVALID SPEAKER FORMAT FROM LLM RUN {attempt_num}: {line}")
+        else:
+            if ("char_map" in line) and ("{" in line) and ("}" in line):
+                char_map = json.loads("{" + line.split("{")[1])
+                for k in char_map.keys():
+                    char_map[k] = (char_map[k].split("/")[0]).lower()
+                    
+    return char_map, line_map
+
 PROMPT_TXT = """
 Prompt: Audiobook Dialogue Annotation Expert
 
@@ -37,10 +70,9 @@ Step-by-Step Instructions:
 Important Rules:
 - Quote lines are lines that START and END with double quotes.
 - Focus on narrative context to determine who is speaking
-- Do NOT base attribution solely on the quote content itself
 - Use surrounding text, character mentions, and narrative flow for attribution
-- Focus on the dialog itself as well. Speakers will not refer to themselves. 
-- Make sure the conversations make sense for sequential text. 
+- Focus on the dialog itself. Speakers will not refer to themselves.
+- Make sure the conversations make sense for sequential text.
 
 5. Example Output Format:
 - char_map : {1: "narrator", 2:"Name", 3:"OtherName"}
@@ -57,75 +89,122 @@ Process:
 - Output line number : speaker number
 
 IMPORTANT:
-- TAKE YOUR TIME AND PRINT ALL QUOTED LINES! 
-- Print with final format in mind.
-- Do not stop until the full text is processed!
-- Do not summarize, go thought the entire text!
+- TAKE YOUR TIME AND PROCESS ALL QUOTED LINES INDIVIDUALLY.
+- Report every line with a quote. There will be many times where thinking will have a range of lines. We need to process each quoted line and print the speaker for each line.
 """
+#- Do NOT base attribution solely on the quote content itself
+#- Print with final format in mind.
+#- Do not stop until the full text is processed!
+#- Do not summarize, go thought the entire text!
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Label a chapter file by character. Speaker (Narrator) for non quoted lines. Speaker (char_name) for spoken lines.")
     parser.add_argument("-txt_file", help="Path to the EPUB file")
+    parser.add_argument("--skip_llm", action="store_true", help="Skip call to LLM and just try to process files into character maps.")
+    parser.add_argument("-num_llm_attempts", type=int, default=5, help="Number of llm attempts submitted.")
     args = parser.parse_args()
     client = OpenAI(base_url="http://localhost:1234/v1", api_key="lm-studio") # api_key can be any string as it's not used by LM Studio
+    
+    if not os.path.exists(args.txt_file):
+        print("Invalid txt_file. Please specify a valid text file and retry.")
+        exit()
 
+    chapter_file_base, _ = os.path.splitext(args.txt_file)
 
-    with open(args.txt_file,"r") as f:
-        lines = f.readlines()
-    # Define your chat messages
-    messages = [
-        {"role": "system", "content": "You are a helpful assistant."+PROMPT_TXT}]
-    [messages.append({"role": "user", "content": x}) for x in lines]
+    if not args.skip_llm:
+        with open(args.txt_file,"r",  encoding='utf-8') as f:
+            lines = f.readlines()
+        # Define your chat messages
+        messages = [
+            {"role": "system", "content": "You are a helpful assistant."+PROMPT_TXT}]
+        [messages.append({"role": "user", "content": x}) for x in lines]
 
-    # Send the chat completion request
-    response_lines = []
-    try:
-        completion = client.chat.completions.create(
-            model="local-model",  # Use a placeholder model name or the specific model ID from LM Studio
-            messages=messages,
-            temperature=0.7,
-            stream=True # Set to True for streaming responses
-        )
+        for a, attempt in enumerate(range(args.num_llm_attempts)):
+            # Send the chat completion request
+            try:
+                print(f"Processing attempt {a}")
+                response = client.chat.completions.create(
+                    model="local-model",  # Use a placeholder model name or the specific model ID from LM Studio
+                    messages=messages,
+                    temperature=0.7,
+                    #stream=True # Set to True for streaming responses
+                ).choices[0].message.content
+                thought_process, result = response.split("</think>")
+                # Save think files
+                with open(chapter_file_base+f".think.{a}.txt", "w", encoding='utf-8') as f:
+                    f.write(thought_process)
+                # Save result files
+                with open(chapter_file_base+f".result.{a}.txt", "w", encoding='utf-8') as f:
+                    f.write(result)
+            except Exception as e:
+                print(f"An error occurred: {e}")
+    
+    character_maps = []
+    line_maps = []
+    merged_character_map = {}
+    for a, attempt in enumerate(range(args.num_llm_attempts)):
+        with open(chapter_file_base+f".result.{a}.txt", "r", encoding='utf-8') as f:
+            result = f.readlines()
+        character_map, line_map = interpret_result(result, a)
+        valid_character_map = True
+        if len(merged_character_map)==0:
+            merged_character_map = character_map
+        else:
+            for k,v in character_map.items():
+                match=False
+                if k in merged_character_map.keys():
+                    if merged_character_map[k] == v:
+                        match=True
+                if not match:
+                    print(f"NO MATCH for run {a}, char_map[{k}] -> {v}. Skipping this run for now. Please resolve and re-run with --skip_llm to recover data.")
+                    valid_character_map = False
+        if valid_character_map:
+            line_maps.append(line_maps)
+    print(merged_character_map)
+    print("line_maps:", len(line_maps))
+    # Now try to resolve mismatches in the maps...
         # Process the response (for streaming)
-        still_thinking=True
-        thinking_text = ""
-        this_chunk=""
-        for chunk in completion:
-            chunk_text = chunk.choices[0].delta.content
-            if chunk_text is None:
-                continue
-            if "</think>" in chunk_text:
-                still_thinking=False
-            elif not still_thinking:
-                this_chunk = this_chunk+chunk_text
-                if "\n" in chunk_text:
-                    response_lines.append(this_chunk.strip())
-                    this_chunk = ""
-            else:
-                thinking_text = thinking_text+chunk_text
-    except Exception as e:
-        print(f"An error occurred: {e}")
-    print(thinking_text)
-    print("-----------------")
-    speaker_map = {}
-    if len(response_lines)>1:
-        char_map = response_lines.pop(0)
-        print("CHARACTER_MAP", char_map)
-        for rline in response_lines:
-            tokens = rline.split(":")
-            if len(tokens) == 2:
-                line, speaker = tokens
-                speaker_map[line] = speaker
-            else:
-                print("INVALID: ", tokens)
-    print(speaker_map)
-    # model, tokenizer = FastLanguageModel.from_pretrained("unsloth/glm-4.5-air-q4")#, load_in_4bit=True
-    # tokenizer = AutoTokenizer.from_pretrained(MODEL_PATH,gguf_file=MODEL_GGUF)
-    # model = AutoModelForCausalLM.from_pretrained(
-    #     MODEL_PATH,
-    #     gguf_file=MODEL_GGUF,
-    #     local_files_only=True,
-    #     # torch_dtype=torch.bfloat16,
-    #     device_map="cuda:1"
-    # )
+        #     response_lines = []
+        #     still_thinking=True
+        #     thinking_text = ""
+        #     this_chunk=""
+        #     for chunk in completion:
+        #         chunk_text = chunk.choices[0].delta.content
+        #         if chunk_text is None:
+        #             continue
+        #         if "</think>" in chunk_text:
+        #             still_thinking=False
+        #         elif not still_thinking:
+        #             this_chunk = this_chunk+chunk_text
+        #             if "\n" in chunk_text:
+        #                 response_lines.append(this_chunk.strip())
+        #                 this_chunk = ""
+        #         else:
+        #             thinking_text = thinking_text+chunk_text
+        # except Exception as e:
+        #     print(f"An error occurred: {e}")
+        # print(thinking_text)
+        # print("-----------------")
+        # speaker_map = {}
+        # if len(response_lines)>1:
+        #     char_map = response_lines.pop(0)
+        #     print("CHARACTER_MAP", char_map)
+        #     for rline in response_lines:
+        #         tokens = rline.split(":")
+        #         if len(tokens) == 2:
+        #             line, speaker = tokens
+        #             speaker_map[line] = speaker
+        #         else:
+        #             print("INVALID: ", tokens)
+        # print(speaker_map)
+
+        # model, tokenizer = FastLanguageModel.from_pretrained("unsloth/glm-4.5-air-q4")#, load_in_4bit=True
+        # tokenizer = AutoTokenizer.from_pretrained(MODEL_PATH,gguf_file=MODEL_GGUF)
+        # model = AutoModelForCausalLM.from_pretrained(
+        #     MODEL_PATH,
+        #     gguf_file=MODEL_GGUF,
+        #     local_files_only=True,
+        #     # torch_dtype=torch.bfloat16,
+        #     device_map="cuda:1"
+        # )
 
     exit()
