@@ -18,6 +18,27 @@ from openai import OpenAI
 #"D:/models/unsloth/GLM-4.5-Air-GGUF"#/#"unsloth/glm-4.5-air-q4"#"unsloth/GLM-4.5-Air-GGUF"#"zai-org/GLM-4.5"
 # /opt/model-storage/GLM-4.5-Air-UD-Q4_K_XL-00001-of-00002.gguf
 
+def add_quotes_around_keys(json_body):
+    """For some json text, we don't have quotes around keys. Example:
+    char_map : {1: "narrator", 2: "char1", 3: "char2", 4: "char3"}
+    ->
+    char_map : {"1": "narrator", "2": "char1", "3": "char2", "4": "char3"}    
+    """
+    entries = []
+    for entry in json_body.replace("{","").replace("}","").split(","):
+        k,v = entry.split(":")
+        k = k.strip()
+        v = v.strip()
+        if '"' not in k:
+            k = '"'+k+'"'
+        if '"' not in v:
+            v = '"'+v+'"'
+        entries.append(k+": "+v)
+    #print("revised quotes to")
+    revised_json_body = "{"+", ".join(entries)+"}"
+    # print(revised_json_body)
+    return revised_json_body
+
 def interpret_result(result, attempt_num):
     """Process result of a LLM query of the following format:
 -----
@@ -36,6 +57,7 @@ char_map : {"1": "narrator", "2": "First Character", "3": "Second Character"}
             if ":" in line and not (line.startswith("#")):
                 try:
                     this_line, speaker_num = line.split(":")
+                    this_line = this_line.replace("Line ","").replace("Lines ","")
                     if "-" in this_line:
                         line_start, line_stop = this_line.split("-")
                         for x in range(int(line_start),int(line_stop)+1):
@@ -46,14 +68,19 @@ char_map : {"1": "narrator", "2": "First Character", "3": "Second Character"}
                     print(f"INVALID SPEAKER FORMAT FROM LLM RUN {attempt_num}: {line}", file=sys.stderr)
         else:
             if ("char_map" in line) and ("{" in line) and ("}" in line):
-                char_map = json.loads("{" + line.split("{")[1])
+                json_body = "{" + line.split("{")[1]
+                try:
+                    char_map = json.loads(json_body)
+                except:
+                    char_map = json.loads(add_quotes_around_keys(json_body))
                 for k in char_map.keys():
                     char_map[k] = (char_map[k].split("/")[0]).lower()
+            # could eventually add a check for """json""" with unquoted keys.
                     
     return char_map, line_map
 
 def merge_line_maps(line_maps, verbose=False):
-    """Take multiple line maps and determine the most commont mapping for each line.
+    """Take multiple line maps and determine the most common mapping for each line.
     If there is only one value for a line, we will pick that value.
     If there are two values for a line, we'll pick the first.
     If there more than two values for a line pick the majority. If all different pick first.
@@ -170,7 +197,11 @@ if __name__ == "__main__":
     for a, attempt in enumerate(range(args.num_llm_attempts)):
         with open(chapter_file_base+f".result.{a}.txt", "r", encoding='utf-8') as f:
             result = f.readlines()
-        character_map, line_map = interpret_result(result, a)
+        try:
+            character_map, line_map = interpret_result(result, a)
+        except Exception as e:
+            print(f"Error in {chapter_file_base}.result.{a}.txt")
+            raise e
         valid_character_map = True
         if len(merged_character_map)==0:
             merged_character_map = character_map
@@ -180,6 +211,10 @@ if __name__ == "__main__":
                 if k in merged_character_map.keys():
                     if merged_character_map[k] == v:
                         match=True
+                    elif v.startswith(merged_character_map[k]):
+                        match = True
+                    elif merged_character_map[k].startswith(v):
+                        match = True
                 if not match:
                     print(f"NO MATCH for run {a}, char_map[{k}] -> {v}. Skipping this run for now. Please resolve and re-run with --skip_llm to recover data.", file=sys.stderr)
                     valid_character_map = False
