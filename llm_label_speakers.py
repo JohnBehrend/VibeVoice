@@ -265,6 +265,7 @@ if __name__ == "__main__":
         print(merged_character_map)
         print("line_maps:", len(line_maps))
     merged_line_map = merge_line_maps(line_maps, args.verbose)
+    merged_line_map = dict(sorted(merged_line_map.items(), key=lambda x: int(x[0])))
     if args.verbose:
         print("Overall line map:")
         print(merged_line_map)
