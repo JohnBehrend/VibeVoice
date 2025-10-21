@@ -382,6 +382,7 @@ class VibeVoiceForConditionalGenerationInference(VibeVoicePreTrainedModel, Gener
         negative_generation_config, negative_model_kwargs, negative_input_ids = self._build_generate_config_model_kwargs(
             None, None, tokenizer, return_processors=False, **negative_kwargs
         )
+        negative_model_kwargs["past_key_values"].to_legacy_cache()
 
         acoustic_cache = VibeVoiceTokenizerStreamingCache()
         semantic_cache = VibeVoiceTokenizerStreamingCache()
@@ -551,8 +552,9 @@ class VibeVoiceForConditionalGenerationInference(VibeVoicePreTrainedModel, Gener
                     negative_model_kwargs['attention_mask'][sample_idx, :] = 0
                     negative_model_kwargs['attention_mask'][sample_idx, -1] = 1
                 # update past key values
-                for layer_idx, (k_cache, v_cache) in enumerate(zip(negative_model_kwargs['past_key_values'].key_cache, 
-                                                                        negative_model_kwargs['past_key_values'].value_cache)):
+                for layer_idx in range(len(negative_model_kwargs['past_key_values'].layers)):
+                    dyn_layer_obj = negative_model_kwargs['past_key_values'].layers[layer_idx]
+                    k_cache, v_cache = dyn_layer_obj.keys, dyn_layer_obj.values
                     # Process each non-diffusion sample
                     for sample_idx in diffusion_start_indices.tolist():
                         # Shift cache for this sample
