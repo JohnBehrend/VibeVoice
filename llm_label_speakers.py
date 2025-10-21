@@ -76,8 +76,8 @@ char_map : {"1": "narrator", "2": "First Character", "3": "Second Character"}
                 for k in char_map.keys():
                     char_map[k] = (char_map[k].split("/")[0]).lower()
             # could eventually add a check for """json""" with unquoted keys.
-                    
-    return char_map, line_map
+
+    return {int(k): v for k,v in char_map.items()}, line_map
 
 def merge_line_maps(line_maps, verbose=False):
     """Take multiple line maps and determine the most common mapping for each line.
@@ -202,24 +202,53 @@ if __name__ == "__main__":
         except Exception as e:
             print(f"Error in {chapter_file_base}.result.{a}.txt")
             raise e
-        valid_character_map = True
+        # print(a)
+        # print(character_map)
+        used_characters = set(line_map.values())
+        # print("used_characters", character_map)
         if len(merged_character_map)==0:
-            merged_character_map = character_map
+            merged_character_map = character_map.copy()
+            # Audit for character that is actually used.
+            for key, character in character_map.items():
+                if key not in used_characters and character != "narrator":
+                    print(f"Removing un-used character in first map:")
+                    print(key)
+                    print("f[{key}]{character}")
+                    print(used_characters)
+                    del merged_character_map[key]
         else:
-            for k,v in character_map.items():
-                match=False
-                if k in merged_character_map.keys():
-                    if merged_character_map[k] == v:
-                        match=True
-                    elif v.startswith(merged_character_map[k]):
-                        match = True
-                    elif merged_character_map[k].startswith(v):
-                        match = True
-                if not match:
-                    print(f"NO MATCH for run {a}, char_map[{k}] -> {v}. Skipping this run for now. Please resolve and re-run with --skip_llm to recover data.", file=sys.stderr)
-                    valid_character_map = False
-        if valid_character_map:
-            line_maps.append(line_map)
+            key_remap = {}
+            for key, character in character_map.items():
+                existing_character=False
+                for m_key, m_character in merged_character_map.items():
+                    if (character == m_character) or \
+                       (character in m_character) or \
+                       (m_character in character):
+                        existing_character=True
+                        key_remap[key] = m_key
+                        if key == m_key:
+                            print(f"Already matched character with same key: [{key}] {character}") 
+                        else:
+                            print(f"Matched character with different key: [{key}->{m_key}] {character}")
+                if not existing_character:
+                    character_is_used = character in line_map.values()
+                    if character_is_used:
+                        new_m_key = max(merged_character_map.keys())+1
+                        merged_character_map[new_m_key] = character
+                        key_remap[new_m_key]=new_m_key
+                        print(f"New character with new key: [{new_m_key}]{character}")
+                        # TODO: remap speakers to the new character
+                    else:
+                        print(f"Unused character {character}, will not be added.")
+            # use key_remap on line_map
+            print(key_remap)
+            # print("PRE linemap")
+            # print(line_map)
+            line_map = {k:key_remap[v] for k,v in line_map.items() if v in key_remap.keys()}
+            # print("POST linemap")
+            # print(line_map)
+        line_maps.append(line_map)
+    # quit() # just merging together the maps for now, don't overwrite maps.
     if args.verbose:
         print(merged_character_map)
         print("line_maps:", len(line_maps))
