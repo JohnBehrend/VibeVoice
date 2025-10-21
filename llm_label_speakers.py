@@ -89,7 +89,11 @@ char_map : {"1": "narrator", "2": "First Character", "3": "Second Character"}
             # could eventually add a check for """json""" with unquoted keys.
     for k in char_map.keys():
         char_map[k] = (char_map[k].split("/")[0]).lower()
-    return {int(k): v for k,v in char_map.items()}, line_map
+    # convert keys to int
+    char_map = {int(k): v for k,v in char_map.items()}
+    # remove line_map entries that are invalid.
+    line_map = {line_num: char_num for line_num, char_num in line_map.items() if char_num in char_map.keys()}
+    return char_map, line_map
 
 def merge_line_maps(line_maps, verbose=False):
     """Take multiple line maps and determine the most common mapping for each line.
