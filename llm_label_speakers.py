@@ -52,6 +52,7 @@ char_map : {"1": "narrator", "2": "First Character", "3": "Second Character"}
       return character_map, line_map"""
     line_map = {}
     char_map = {}
+    IN_CHARMAP = False
     for line in result:
         if len(char_map) > 0:
             if ":" in line and not (line.startswith("#")):
@@ -66,6 +67,15 @@ char_map : {"1": "narrator", "2": "First Character", "3": "Second Character"}
                         line_map[int(this_line)] = int(speaker_num)
                 except:
                     print(f"INVALID SPEAKER FORMAT FROM LLM RUN {attempt_num}: {line}", file=sys.stderr)
+        elif IN_CHARMAP:
+            json_body = json_body+line.strip()
+            if "}" in line:
+                IN_CHARMAP=False
+                print("TRYING MULTLINE CHARMAP:", json_body)
+                try:
+                    char_map = json.loads(json_body)
+                except:
+                    char_map = json.loads(add_quotes_around_keys(json_body))
         else:
             if ("char_map" in line) and ("{" in line) and ("}" in line):
                 json_body = "{" + line.split("{")[1]
@@ -73,10 +83,12 @@ char_map : {"1": "narrator", "2": "First Character", "3": "Second Character"}
                     char_map = json.loads(json_body)
                 except:
                     char_map = json.loads(add_quotes_around_keys(json_body))
-                for k in char_map.keys():
-                    char_map[k] = (char_map[k].split("/")[0]).lower()
+            elif ("char_map" in line) and ("{" in line):
+                IN_CHARMAP=True
+                json_body = "{"
             # could eventually add a check for """json""" with unquoted keys.
-
+    for k in char_map.keys():
+        char_map[k] = (char_map[k].split("/")[0]).lower()
     return {int(k): v for k,v in char_map.items()}, line_map
 
 def merge_line_maps(line_maps, verbose=False):
