@@ -41,7 +41,9 @@ def denoise_speech(audio):
     wav_16k = torch.nn.functional.pad(wav_16k,(0,24000))
     for chunk in wav_16k.view(-1).split(16000 * 60):
         inputs = preprocessor(
-            torch.nn.functional.pad(chunk, (40, 40)), return_tensors="pt",
+            torch.nn.functional.pad(chunk, (40, 40)),
+            return_tensors="pt",
+            sampling_rate=16_000
         ).to('cuda')
         with torch.inference_mode():
             feature = fe(inputs["input_features"].to("cuda"))["last_hidden_state"]

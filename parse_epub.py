@@ -7,9 +7,9 @@ import argparse
 import sys
 import os
 import time
+import json
 
-from parse_chapter import valid_context_list, invalid_speaker_list, speaker_map
-from parse_chapter import same_speaker_tokens, parse_epub_to_chapters
+from parse_chapter import parse_epub_to_chapters
 
 # Text to speach generation
 import torch
@@ -47,13 +47,21 @@ def get_non_silent_audio_from_wavs(wav_filepath_list, min_silence_len=1250, sile
             all_audio_segments = all_audio_segments+this_audio_segment
     return all_audio_segments
 
+def load_json(filename):
+    if os.path.exists(filename):
+        with open(filename, "r",encoding="utf-8") as f:
+            return json.load(f)
+    else:
+        return None
 def parse_epub():
     parser = argparse.ArgumentParser(description="Parse an EPUB file into an array of chapters")
     parser.add_argument("epub_file", help="Path to the EPUB file")
+    parser.add_argument("-voices_map", metavar="voices_map.json", help="Map voice numbers to corresponding wav audio files in demos/voices/*.wav")
     parser.add_argument("--speaker_histogram", action="store_true", help="Print out a histogram of speakers.")
     parser.add_argument("--by_chapter", action="store_true", help="Save a file per chapter in a new folder labled chapters")
     parser.add_argument("--resume",action="store_true", help="Try to resume crunching in the directory based on files present.")
     parser.add_argument("--alt_gpu",action="store_true", help="Use other gpu for processing.")
+    parser.add_argument("--verbose", action="store_true", help="Print verbose logging information")
     args = parser.parse_args()
     
     # Parse the EPUB file
@@ -62,53 +70,6 @@ def parse_epub():
     if not chapters:
         print("No chapters found or error occurred")
         sys.exit(1)
-    
-    for i, chapter in enumerate(chapters):
-        # print(f"CHAPTER{i}")
-        was_quote = False
-        next_valid_speaker=None
-        for j, chapter_obj in enumerate(chapter):
-            toks = chapter_obj.text.split(" ")
-            if chapter_obj.has_quotes is True:
-                # If we have quotes, only swap the speaker if it was unknonwn.
-                if was_quote or next_valid_speaker is None:
-                    temp = j
-                    while(temp>0):
-                        if chapter[temp].has_quotes:
-                            if chapter[temp].get_speaker() != chapter_obj.get_speaker():
-                                if chapter[temp].get_speaker() is not None:
-                                    chapter_obj.set_speaker(chapter[temp].get_speaker())
-                                    break
-                        temp = temp-1
-                else: # If we know the speaker, use it
-                    chapter_obj.set_speaker(next_valid_speaker)
-            elif chapter_obj.has_quotes is False:
-                if len(toks)>=2: # can update prior chapters if we have context
-                    # scan tokens one by one. Avoid adverbs, and find proper nouns.
-                    speaker = None
-                    for i, tok in enumerate(toks):
-                        if i == 0:
-                            continue
-                        # navigate manually to find proper nouns as speakers
-                        if tok.replace(",","").replace(".","").replace(";","") in valid_context_list:
-                            if toks[i-1].endswith("ly"): # adverb
-                                if (i>1) and len(toks[i-2])>0 and toks[i-2][0].isupper():
-                                    speaker = toks[i-2].replace(",","").replace(".","").replace(";","").replace("'s","").replace("'","")
-                            elif toks[i-1].lower() in same_speaker_tokens:
-                                speaker = toks[i-1].lower()
-                            elif len(toks[i-1])>0 and toks[i-1][0].isupper(): # proper noun
-                                speaker = toks[i-1].replace(",","").replace(".","").replace(";","").replace("'s","").replace("'","")
-                    if speaker is None:
-                        pass # print(f"UNKNOWN SPEAKER from {toks}")
-                    if speaker:
-                        if speaker not in invalid_speaker_list+[x for x in same_speaker_tokens if x not in ["she","her"]]: # Ignore He/she/we/they
-                            if was_quote:
-                                # print("**",speaker, " set to ",chapter[j-1])
-                                chapter[j-1].set_speaker(speaker) # only update previous chapter if it was a quote
-                            next_valid_speaker = speaker # but keep track of valid speakers for next quote
-                        else:
-                            next_valid_speaker = None
-            was_quote = chapter_obj.has_quotes
 
     # Print each chapter (you can modify this to output in different formats)
     speaker_counts={}
@@ -119,13 +80,37 @@ def parse_epub():
     if args.alt_gpu:
         target_device="cuda:0"
 
-    model_path="Jmica/VibeVoice7B"#"FabioSarracino/VibeVoice-Large-Q8""microsoft/VibeVoice-1.5B"
-    voices_map = { # male narrator, femail voices.
-        1: "en-Travis_man",
-        2: "en-Rosumand_woman",#,en-John_man",
-        3: "en-Rosumand_woman",
-        4: "en-Rosumand_woman",#"en-Alice_woman"
-    }
+    model_path="Jmica/VibeVoice7B"#"FabioSarracino/VibeVoice-Large-Q8""microsoft/VibeVoice-1.5B" 
+    voices_map = None
+    if args.voices_map is not None:
+        voices_map = load_json(args.voices_map)
+    if args.verbose:
+        print ("chapter_voice_map:",voices_map)
+
+    for i, chapter in enumerate(chapters):
+        chapter_map = load_json(f"./chapters/chapter_{i}.map.json")
+        if args.verbose:
+            print(f"Chapter {i}")
+        if chapter_map:
+            character_map, line_map = chapter_map
+            character_map = {int(k):v for k,v in character_map.items()}
+            line_map = {int(k): v for k, v in line_map.items()}
+            line_to_character_map = {k: character_map[v] for k, v in line_map.items()}
+            if all(x in voices_map.keys() for x in line_to_character_map.values()):
+                line_to_voice_map = {k: voices_map[v] for k,v in line_to_character_map.items()}
+            else:
+                print("Please fill in the following characters in the voices map:")
+                print(json.dumps({v: "" for k,v in line_to_character_map.items() if v not in voices_map.keys()}, indent=4))
+                exit()
+            for cobj in chapter:
+                if cobj.has_quotes:
+                    if cobj.line_num in line_map.keys():
+                            if args.verbose:
+                                print(f"Line {cobj.line_num} -> {line_to_character_map[cobj.line_num]} -> {line_to_voice_map[cobj.line_num]}")
+                            cobj.set_speaker(line_to_voice_map[cobj.line_num])
+                else:
+                    cobj.set_speaker(voices_map["narrator"])
+    # TODO: Give unique characters individual seed values to distringuish!
     validation_model = WhisperModel("tiny.en")
     # Re-initialize the processor for a new voice
     tts_model = VibeVoiceForConditionalGenerationInference.from_pretrained(
@@ -138,122 +123,124 @@ def parse_epub():
     tts_model.eval()
     cfg_scale=1.85
     processor = VibeVoiceProcessor.from_pretrained(model_path)
-    end_map={".":"..", "?": "?...",",":"..."}
     still_skip=True
-    for i, chapter in enumerate(chapters):
+    if args.alt_gpu:
+        chapter_iterator = list(reversed(enumerate(chapters)))
+    else:    
+        chapter_iterator =enumerate(chapters)
+
+    for i, chapter in chapter_iterator:
         if args.resume:
             if os.path.exists(f"./chapters/chapter_{str(i).zfill(2)}.mp3"):
                 print(f"Skipping chapter {str(i).zfill(2)}.",end="\r")
                 continue
-        if args.by_chapter:
-            for voice_idx in reversed(voices_map.keys()): # reversed()
-                if args.resume:
-                    already_generated = [int(x.split(".")[-2]) for x in glob.glob(f"./chapters/chapter_{str(i).zfill(2)}.*.wav" ) if not x.endswith(".tmp.wav")]
-                else:
-                    already_generated = []
-                for j, chapter_obj in enumerate(chapter):
-                    if voice_idx != speaker_map[chapter_obj.get_speaker()]:
-                        continue # skip if its a different voice
-                    if still_skip:
-                        if j not in already_generated:
-                            still_skip=False # Found point to resume from
-                            print(f"\nResuming with chapter {i}.{j}.")
-                        else:
-                            print(f"Skipping chapter {str(i).zfill(2)}.{str(j).zfill(4)}", end="\r")
-                            continue
-                    # TODO: for longer text, break up by ". " if possible. Can have fullscript actually be a list maybe?
-                    full_script="Speaker 1: "+str(chapter_obj.text[0].upper()+chapter_obj.text[1:])
-                    if full_script.endswith("..."):
-                        pass
-                    elif full_script.endswith("."):
-                        full_script+=".."
-                    elif full_script.endswith(","):
-                        full_script=full_script[0:-1]+"..."
-                    elif full_script.endswith(" "):
-                        full_script=full_script[0:-1]+"..."
-                    elif full_script.endswith(", "):
-                        full_script=full_script[0:-2]+"..."
-                    elif full_script.endswith(":"):
-                        full_script=full_script[0:-1]+"..."
-                    elif full_script.endswith(": "):
-                        full_script=full_script[0:-2]+"..."
+        voices_used = set([chapter_obj.get_speaker() for chapter_obj in chapter])
+        for voice in voices_used:
+            if args.resume:
+                already_generated = [int(x.split(".")[-2]) for x in glob.glob(f"./chapters/chapter_{str(i).zfill(2)}.*.wav" ) if not x.endswith(".tmp.wav")]
+            else:
+                already_generated = []
+            for j, chapter_obj in enumerate(chapter):
+                if voice != chapter_obj.get_speaker():
+                    continue # skip if its a different voice
+                if still_skip:
+                    if j not in already_generated:
+                        still_skip=False # Found point to resume from
+                        print(f"\nResuming with chapter {i}.{j}.")
                     else:
-                        full_script+=" ..."
-                    ratio = 0.0
-                    max_ratio = 0.0
-                    retries = 0
-                    while ratio < 0.9 and retries < 5:
-                        # Prepare inputs for the model
-                        voice_used = voices_map[voice_idx]
-                        inputs = processor(
-                            text=[full_script], # Wrap in list for batch processing
-                            voice_samples=[voice_mapper.get_voice_path(voice_used)],
-                            padding=True,
-                            return_tensors="pt",
-                            return_attention_mask=True,
-                        )
-                        for k, v in inputs.items():
-                            if torch.is_tensor(v):
-                                inputs[k] = v.to(target_device)
+                        print(f"Skipping chapter {str(i).zfill(2)}.{str(j).zfill(4)}", end="\r")
+                        continue
+                # TODO: for longer text, break up by ". " if possible. Can have fullscript actually be a list maybe?
+                full_script="Speaker 1: "+str(chapter_obj.text[0].upper()+chapter_obj.text[1:])
+                # if full_script.endswith("..."):
+                #     pass
+                # elif full_script.endswith("."):
+                #     full_script+=".."
+                # elif full_script.endswith(","):
+                #     full_script=full_script[0:-1]+"..."
+                # elif full_script.endswith(" "):
+                #     full_script=full_script[0:-1]+"..."
+                # elif full_script.endswith(", "):
+                #     full_script=full_script[0:-2]+"..."
+                # elif full_script.endswith(":"):
+                #     full_script=full_script[0:-1]+"..."
+                # elif full_script.endswith(": "):
+                #     full_script=full_script[0:-2]+"..."
+                # else:
+                #     full_script+=" ..."
+                ratio = 0.0
+                max_ratio = 0.0
+                retries = 0
+                while ratio < 0.8 and retries < 5:
+                    # Prepare inputs for the model
+                    inputs = processor(
+                        text=[full_script], # Wrap in list for batch processing
+                        voice_samples=[voice_mapper.get_voice_path(voice)],
+                        padding=True,
+                        return_tensors="pt",
+                        return_attention_mask=True,
+                    )
+                    for k, v in inputs.items():
+                        if torch.is_tensor(v):
+                            inputs[k] = v.to(target_device)
 
-                        outputs = tts_model.generate(
-                            **inputs,
-                            max_new_tokens=None,
-                            cfg_scale=cfg_scale,
-                            tokenizer=processor.tokenizer,
-                            do_sample=False,
-                            verbose=False,
-                        )
+                    outputs = tts_model.generate(
+                        **inputs,
+                        max_new_tokens=None,
+                        cfg_scale=cfg_scale,
+                        tokenizer=processor.tokenizer,
+                        do_sample=False,
+                        verbose=False,
+                    )
 
-                        # Save output (processor handles device internally)
-                        output_path = f"./chapters/chapter_{str(i).zfill(2)}.{str(j).zfill(4)}.tmp.wav"            
-                        processor.save_audio(
-                            outputs.speech_outputs[0], # First (and only) batch item
-                            output_path=output_path,
-                        )
-                        del inputs
-                        del outputs
-                        # Explicitly collect garbage (optional, but can help)
-                        gc.collect()
+                    # Save output (processor handles device internally)
+                    output_path = f"./chapters/chapter_{str(i).zfill(2)}.{str(j).zfill(4)}.tmp.wav"            
+                    processor.save_audio(
+                        outputs.speech_outputs[0], # First (and only) batch item
+                        output_path=output_path,
+                    )
+                    del inputs
+                    del outputs
+                    # Explicitly collect garbage (optional, but can help)
+                    gc.collect()
 
-                        # Clear the CUDA memory cache
-                        torch.cuda.empty_cache()
-                        #torch.cuda.synchronize()
+                    # Clear the CUDA memory cache
+                    torch.cuda.empty_cache()
+                    #torch.cuda.synchronize()
 
-                        # send through a cleaning ML algo
-                        sample_rate, waveform = wavfile.read(output_path)
-                        sample_rate, waveform = denoise_speech((sample_rate,waveform))
-                        wavfile.write(output_path, sample_rate, waveform)
+                    # send through a cleaning ML algo
+                    sample_rate, waveform = wavfile.read(output_path)
+                    sample_rate, waveform = denoise_speech((sample_rate,waveform))
+                    wavfile.write(output_path, sample_rate, waveform)
+                    #print(f"Saved output to {output_path}")
 
-                        # remove long silences after filtering
-
-                        #print(f"Saved output to {output_path}")
-                        segments, info = validation_model.transcribe(f"./chapters/chapter_{str(i).zfill(2)}.{str(j).zfill(4)}.tmp.wav")
-                        input_string = chapter_obj.text
-                        detected_string = "\n".join([str(x.text) for x in segments])
-
-                        ratio = SequenceMatcher(None, input_string.lower(), detected_string.lower()).quick_ratio() # quick ratio doesn't care about oder just set match
-                        if ratio > max_ratio:
-                            max_ratio = ratio
-                            if os.path.exists( f"./chapters/chapter_{str(i).zfill(2)}.{str(j).zfill(4)}.wav"):
-                                os.unlink(f"./chapters/chapter_{str(i).zfill(2)}.{str(j).zfill(4)}.wav")
-                            time.sleep(2) # make sure the file is closed by the time we rename it
-                            os.rename(f"./chapters/chapter_{str(i).zfill(2)}.{str(j).zfill(4)}.tmp.wav",
-                                    f"./chapters/chapter_{str(i).zfill(2)}.{str(j).zfill(4)}.wav")
-                        print(str(j).zfill(4),", Attempt: ", retries+1, ", Ratio: ", int(ratio*100), "Voice: ", voice_used, full_script)
-                        # input_ids', 'attention_mask', 'speech_input_mask', 'speech_tensors', 'speech_masks', 'parsed_scripts', 'all_speakers_list'
-                        retries+=1
-                    if os.path.exists(f"./chapters/chapter_{str(i).zfill(2)}.{str(j).zfill(4)}.tmp.wav"):
-                        os.unlink(f"./chapters/chapter_{str(i).zfill(2)}.{str(j).zfill(4)}.tmp.wav")
-                    # break# chapter_obj
-            wavs = glob.glob(f"./chapters/chapter_{str(i).zfill(2)}.*.wav")
-            audio = get_non_silent_audio_from_wavs(wavs)
-            audio.export(f"./chapters/chapter_{str(i).zfill(2)}.mp3", format="mp3")
-            # remove the wav files
-            [os.unlink(x) for x in wavs]
-            # break # chapters
-        else:
-            print(chapter_obj)
+                    # remove long silences after filtering
+                    segments, info = validation_model.transcribe(f"./chapters/chapter_{str(i).zfill(2)}.{str(j).zfill(4)}.tmp.wav")
+                    input_string = chapter_obj.text.lower()
+                    detected_string = " ".join([str(x.text) for x in segments]).lower()
+                    ratio = SequenceMatcher(None, input_string, detected_string).ratio() # quick ratio doesn't care about oder just set match
+                    print(str(j).zfill(4),", Attempt: ", retries+1, "Ratio: ", int(ratio*100),"Voice: ", voice)
+                    print("INPUT:", input_string)
+                    print("OUTPUT: ", detected_string)
+                    # break
+                    if ratio > max_ratio:
+                        max_ratio = ratio
+                        if os.path.exists( f"./chapters/chapter_{str(i).zfill(2)}.{str(j).zfill(4)}.wav"):
+                            os.unlink(f"./chapters/chapter_{str(i).zfill(2)}.{str(j).zfill(4)}.wav")
+                        time.sleep(2) # make sure the file is closed by the time we rename it
+                        os.rename(f"./chapters/chapter_{str(i).zfill(2)}.{str(j).zfill(4)}.tmp.wav",
+                                f"./chapters/chapter_{str(i).zfill(2)}.{str(j).zfill(4)}.wav")
+                    # input_ids', 'attention_mask', 'speech_input_mask', 'speech_tensors', 'speech_masks', 'parsed_scripts', 'all_speakers_list'
+                    retries+=1
+                if os.path.exists(f"./chapters/chapter_{str(i).zfill(2)}.{str(j).zfill(4)}.tmp.wav"):
+                    os.unlink(f"./chapters/chapter_{str(i).zfill(2)}.{str(j).zfill(4)}.tmp.wav")
+                # break# chapter_obj
+        wavs = glob.glob(f"./chapters/chapter_{str(i).zfill(2)}.*.wav")
+        audio = get_non_silent_audio_from_wavs(wavs)
+        audio.export(f"./chapters/chapter_{str(i).zfill(2)}.mp3", format="mp3")
+        # remove the wav files
+        [os.unlink(x) for x in wavs]
+        # break # chapters
         if args.speaker_histogram:
             this_speaker = str(chapter_obj.get_speaker())
             if this_speaker in speaker_counts.keys():
@@ -263,9 +250,5 @@ def parse_epub():
         # break
     print("\n".join([str(x) for x in sorted(speaker_counts.items(), key=lambda x: x[1], reverse=True)]))
 
-
-
-    # print("SPEAKERS")
-    # print(speakers)
 if __name__ == "__main__":
     parse_epub()
