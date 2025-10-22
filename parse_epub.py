@@ -86,8 +86,12 @@ def parse_epub():
         voices_map = load_json(args.voices_map)
     if args.verbose:
         print ("chapter_voice_map:",voices_map)
+    if args.alt_gpu:
+        chapter_iterator = reversed(list(enumerate(chapters)))
+    else:    
+        chapter_iterator =enumerate(chapters)
 
-    for i, chapter in enumerate(chapters):
+    for i, chapter in chapter_iterator:
         chapter_map = load_json(f"./chapters/chapter_{i}.map.json")
         if args.verbose:
             print(f"Chapter {i}")
@@ -125,7 +129,7 @@ def parse_epub():
     processor = VibeVoiceProcessor.from_pretrained(model_path)
     still_skip=True
     if args.alt_gpu:
-        chapter_iterator = list(reversed(enumerate(chapters)))
+        chapter_iterator = reversed(list(enumerate(chapters)))
     else:    
         chapter_iterator =enumerate(chapters)
 
@@ -202,10 +206,11 @@ def parse_epub():
                     del inputs
                     del outputs
                     # Explicitly collect garbage (optional, but can help)
-                    gc.collect()
+                    # Temporariliy undo the garbage collection and empty_cache since it may impact parallel parsing
+                    #gc.collect()
 
                     # Clear the CUDA memory cache
-                    torch.cuda.empty_cache()
+                    #torch.cuda.empty_cache()
                     #torch.cuda.synchronize()
 
                     # send through a cleaning ML algo
