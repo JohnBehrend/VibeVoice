@@ -61,6 +61,7 @@ def parse_epub():
     parser.add_argument("--by_chapter", action="store_true", help="Save a file per chapter in a new folder labled chapters")
     parser.add_argument("--resume",action="store_true", help="Try to resume crunching in the directory based on files present.")
     parser.add_argument("--alt_gpu",action="store_true", help="Use other gpu for processing.")
+    parser.add_argument("--alt_order",action="store_true", help="Use same gpu but high chapters to low chapters for processing.")
     parser.add_argument("--verbose", action="store_true", help="Print verbose logging information")
     args = parser.parse_args()
     
@@ -76,9 +77,12 @@ def parse_epub():
     os.makedirs("./chapters", exist_ok=True)
     voice_mapper = VoiceMapper()
 
-    target_device="cuda:1"
     if args.alt_gpu:
         target_device="cuda:0"
+        torch.cuda.set_device(0)
+    else:
+        target_device="cuda:1"
+        torch.cuda.set_device(1)
 
     model_path="Jmica/VibeVoice7B"#"FabioSarracino/VibeVoice-Large-Q8""microsoft/VibeVoice-1.5B" 
     voices_map = None
@@ -86,7 +90,7 @@ def parse_epub():
         voices_map = load_json(args.voices_map)
     if args.verbose:
         print ("chapter_voice_map:",voices_map)
-    if args.alt_gpu:
+    if args.alt_gpu or args.alt_order:
         chapter_iterator = reversed(list(enumerate(chapters)))
     else:    
         chapter_iterator =enumerate(chapters)
@@ -112,6 +116,9 @@ def parse_epub():
                             if args.verbose:
                                 print(f"Line {cobj.line_num} -> {line_to_character_map[cobj.line_num]} -> {line_to_voice_map[cobj.line_num]}")
                             cobj.set_speaker(line_to_voice_map[cobj.line_num])
+                    else:
+                        print(f"Line {cobj.line_num} -> narrator even though this is a quote.", file=sys.stderr)
+                        cobj.set_speaker(voices_map["narrator"])
                 else:
                     cobj.set_speaker(voices_map["narrator"])
     # TODO: Give unique characters individual seed values to distringuish!
@@ -128,7 +135,7 @@ def parse_epub():
     cfg_scale=1.85
     processor = VibeVoiceProcessor.from_pretrained(model_path)
     still_skip=True
-    if args.alt_gpu:
+    if args.alt_gpu or args.alt_order:
         chapter_iterator = reversed(list(enumerate(chapters)))
     else:    
         chapter_iterator =enumerate(chapters)
@@ -205,13 +212,12 @@ def parse_epub():
                     )
                     del inputs
                     del outputs
-                    # Explicitly collect garbage (optional, but can help)
-                    # Temporariliy undo the garbage collection and empty_cache since it may impact parallel parsing
-                    #gc.collect()
-
-                    # Clear the CUDA memory cache
-                    #torch.cuda.empty_cache()
-                    #torch.cuda.synchronize()
+                    if args.alt_gpu:
+                        # Explicitly collect garbage (optional, but can help) on alternate gpu only
+                        gc.collect()
+                        # Clear the CUDA memory cache
+                        torch.cuda.empty_cache()
+                        #torch.cuda.synchronize()
 
                     # send through a cleaning ML algo
                     sample_rate, waveform = wavfile.read(output_path)
