@@ -229,8 +229,7 @@ if __name__ == "__main__":
                 if key not in used_characters and character != "narrator":
                     print(f"Removing un-used character in first map:")
                     print(key)
-                    print("f[{key}]{character}")
-                    print(used_characters)
+                    print(f"[{key}]{character}")
                     del merged_character_map[key]
         else:
             key_remap = {}
