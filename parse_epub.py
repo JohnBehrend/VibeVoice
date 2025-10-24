@@ -183,22 +183,6 @@ def parse_epub():
                 short_text_flag = len(chapter_obj.text) < 30
                 if short_text_flag:
                     full_script = full_script + short_text_postfix
-                # if full_script.endswith("..."):
-                #     pass
-                # elif full_script.endswith("."):
-                #     full_script+=".."
-                # elif full_script.endswith(","):
-                #     full_script=full_script[0:-1]+"..."
-                # elif full_script.endswith(" "):
-                #     full_script=full_script[0:-1]+"..."
-                # elif full_script.endswith(", "):
-                #     full_script=full_script[0:-2]+"..."
-                # elif full_script.endswith(":"):
-                #     full_script=full_script[0:-1]+"..."
-                # elif full_script.endswith(": "):
-                #     full_script=full_script[0:-2]+"..."
-                # else:
-                #     full_script+=" ..."
                 ratio = 0.0
                 max_ratio = 0.0
                 retries = 0
