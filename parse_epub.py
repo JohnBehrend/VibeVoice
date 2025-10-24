@@ -20,6 +20,7 @@ from demo.inference_from_file import VoiceMapper
 # Voice to Text for validation
 from difflib import SequenceMatcher
 from faster_whisper import WhisperModel
+import whisperx
 
 # combine auido files
 import glob
@@ -53,6 +54,19 @@ def load_json(filename):
             return json.load(f)
     else:
         return None
+def color_word(word, score):
+    """
+    Annotates terminal color strings around word.
+    The gradient progresses from red (score=0) to green (score=1).
+    """
+    reset_code = "\033[0m"
+    red = int(255 * (1 - score))
+    green = int(255 * score)
+    blue = 0
+
+    color_code = f"\033[38;2;{red};{green};{blue}m"
+    return f"{color_code}{word}{reset_code}"
+
 def parse_epub():
     parser = argparse.ArgumentParser(description="Parse an EPUB file into an array of chapters")
     parser.add_argument("epub_file", help="Path to the EPUB file")
@@ -122,7 +136,10 @@ def parse_epub():
                 else:
                     cobj.set_speaker(voices_map["narrator"])
     # TODO: Give unique characters individual seed values to distringuish!
-    validation_model = WhisperModel("tiny.en")
+    #"large-v2"
+    short_text_postfix = " and they win everything."
+    postfix_detect_token = short_text_postfix.lower().strip().split(" ")[0]
+    validation_model = whisperx.load_model("distil-medium.en", "cuda", compute_type="float16") # WhisperModel("tiny.en")
     # Re-initialize the processor for a new voice
     tts_model = VibeVoiceForConditionalGenerationInference.from_pretrained(
         model_path, # model_path 
@@ -163,6 +180,9 @@ def parse_epub():
                         continue
                 # TODO: for longer text, break up by ". " if possible. Can have fullscript actually be a list maybe?
                 full_script="Speaker 1: "+str(chapter_obj.text[0].upper()+chapter_obj.text[1:])
+                short_text_flag = len(chapter_obj.text) < 30
+                if short_text_flag:
+                    full_script = full_script + short_text_postfix
                 # if full_script.endswith("..."):
                 #     pass
                 # elif full_script.endswith("."):
@@ -182,7 +202,10 @@ def parse_epub():
                 ratio = 0.0
                 max_ratio = 0.0
                 retries = 0
-                while ratio < 0.8 and retries < 5:
+                input_string = chapter_obj.text.lower()
+                print("INPUT:", input_string)
+
+                while ratio < 0.95 and retries < 10:
                     # Prepare inputs for the model
                     inputs = processor(
                         text=[full_script], # Wrap in list for batch processing
@@ -225,14 +248,44 @@ def parse_epub():
                     wavfile.write(output_path, sample_rate, waveform)
                     #print(f"Saved output to {output_path}")
 
-                    # remove long silences after filtering
-                    segments, info = validation_model.transcribe(f"./chapters/chapter_{str(i).zfill(2)}.{str(j).zfill(4)}.tmp.wav")
-                    input_string = chapter_obj.text.lower()
-                    detected_string = " ".join([str(x.text) for x in segments]).lower()
-                    ratio = SequenceMatcher(None, input_string, detected_string).ratio() # quick ratio doesn't care about oder just set match
+                    audio = whisperx.load_audio(f"./chapters/chapter_{str(i).zfill(2)}.{str(j).zfill(4)}.tmp.wav")
+                    result = validation_model.transcribe(audio, batch_size=1)
+                    model_a, metadata = whisperx.load_align_model(language_code=result["language"], device="cuda")
+                    result = whisperx.align(result["segments"], model_a, metadata, audio, "cuda", return_char_alignments=False)
+                    prev_end = None
+                    pauses = []
+                    for segment in result["word_segments"]:
+                        if prev_end is not None:
+                            pause_length = segment["start"] - prev_end
+                        else:
+                            pause_length = 0
+                        prev_end = segment["end"]
+                        pauses.append(pause_length)
+                    segments = [s["word"].lower() for s in result["word_segments"]]
+                    scores = [s["score"] for s in result["word_segments"]]
+                    start_times = [s["start"] for s in result["word_segments"]]
+                    print(" ".join([color_word(word, score)+"#"*int(pause) for word, score, pause in zip(segments, scores, pauses)]))
+                    detected_string = " ".join(segments)
+                    if short_text_flag:
+                        input_string = input_string + short_text_postfix.lower()
+                    ratio = SequenceMatcher((lambda c: c in [",",".","...",";"]), input_string, detected_string).ratio() # quick ratio doesn't care about oder just set match
                     print(str(j).zfill(4),", Attempt: ", retries+1, "Ratio: ", int(ratio*100),"Voice: ", voice)
-                    print("INPUT:", input_string)
-                    print("OUTPUT: ", detected_string)
+                    if short_text_flag:
+                        if short_text_postfix.lower() in detected_string:
+                            if detected_string.startswith(short_text_postfix.lower()):
+                                print("POSTFIX DETECTED BUT ONLY POSTFIX! -> Ratio 0")
+                                ratio = 0
+                            else:
+                                postfix_start_index = segments[::-1].index(postfix_detect_token)
+                                clip_end = start_times[::-1][postfix_start_index]
+                                print(f"POSTFIX DETECTED CLIPPING to {clip_end}")
+                                #Trim the clip to no longer include the postfix string.
+                                audio = pydub.AudioSegment.from_wav(f"./chapters/chapter_{str(i).zfill(2)}.{str(j).zfill(4)}.tmp.wav")
+                                trimmed_audio = audio[0:(clip_end*1000)]
+                                trimmed_audio.export(f"./chapters/chapter_{str(i).zfill(2)}.{str(j).zfill(4)}.tmp.wav", format="wav")
+                        else:
+                            print("POSTFIX UN-DETECTED -> Ratio 0")
+                            ratio = 0
                     # break
                     if ratio > max_ratio:
                         max_ratio = ratio
