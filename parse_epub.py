@@ -92,11 +92,11 @@ def parse_epub():
     voice_mapper = VoiceMapper()
 
     if args.alt_gpu:
-        target_device="cuda:0"
-        torch.cuda.set_device(0)
-    else:
         target_device="cuda:1"
         torch.cuda.set_device(1)
+    else:
+        target_device="cuda:0"
+        torch.cuda.set_device(0)
 
     model_path="Jmica/VibeVoice7B"#"FabioSarracino/VibeVoice-Large-Q8""microsoft/VibeVoice-1.5B" 
     voices_map = None
@@ -137,7 +137,7 @@ def parse_epub():
                     cobj.set_speaker(voices_map["narrator"])
     # TODO: Give unique characters individual seed values to distringuish!
     #"large-v2"
-    short_text_postfix = " and they win everything."
+    short_text_postfix = " and they win everything"
     postfix_detect_token = short_text_postfix.lower().strip().split(" ")[0]
     validation_model = whisperx.load_model("distil-medium.en", "cuda", compute_type="float16") # WhisperModel("tiny.en")
     # Re-initialize the processor for a new voice
@@ -186,7 +186,7 @@ def parse_epub():
                 ratio = 0.0
                 max_ratio = 0.0
                 retries = 0
-                input_string = chapter_obj.text.lower()
+                input_string = chapter_obj.text.lower().replace("?","").replace(".", "").replace("-","").replace(";","").replace(",","").replace("!","")
                 print("INPUT:", input_string)
 
                 while ratio < 0.95 and retries < 10:
@@ -240,16 +240,15 @@ def parse_epub():
                     pauses = []
                     for segment in result["word_segments"]:
                         if prev_end is not None:
-                            pause_length = segment["start"] - prev_end
-                        else:
-                            pause_length = 0
+                            pauses.append(segment["start"] - prev_end)
                         prev_end = segment["end"]
-                        pauses.append(pause_length)
+                    pauses.append(0)
                     segments = [s["word"].lower() for s in result["word_segments"]]
                     scores = [s["score"] for s in result["word_segments"]]
-                    start_times = [s["start"] for s in result["word_segments"]]
+                    # start_times = [s["start"] for s in result["word_segments"]]
+                    end_times = [s["start"] for s in result["word_segments"]]
                     print(" ".join([color_word(word, score)+"#"*int(pause) for word, score, pause in zip(segments, scores, pauses)]))
-                    detected_string = " ".join(segments)
+                    detected_string = " ".join(segments).replace("?","").replace(".", "").replace("-","").replace(";","").replace(",","").replace("!","")
                     if short_text_flag:
                         input_string = input_string + short_text_postfix.lower()
                     ratio = SequenceMatcher((lambda c: c in [",",".","...",";"]), input_string, detected_string).ratio() # quick ratio doesn't care about oder just set match
@@ -261,7 +260,8 @@ def parse_epub():
                                 ratio = 0
                             else:
                                 postfix_start_index = segments[::-1].index(postfix_detect_token)
-                                clip_end = start_times[::-1][postfix_start_index]
+                                # clip_end = start_times[::-1][postfix_start_index] - 0.100 # pad 100ms to ensure clean finsh 
+                                clip_end = end_times[::-1][postfix_start_index+1]
                                 print(f"POSTFIX DETECTED CLIPPING to {clip_end}")
                                 #Trim the clip to no longer include the postfix string.
                                 audio = pydub.AudioSegment.from_wav(f"./chapters/chapter_{str(i).zfill(2)}.{str(j).zfill(4)}.tmp.wav")
