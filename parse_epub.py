@@ -98,7 +98,7 @@ def parse_epub():
         target_device="cuda:0"
         torch.cuda.set_device(0)
 
-    model_path="Jmica/VibeVoice7B"#"FabioSarracino/VibeVoice-Large-Q8""microsoft/VibeVoice-1.5B" 
+    model_path="Jmica/VibeVoice7B"#"tensorbanana/vibevoice-7b-no-llm-bf16"#"FabioSarracino/VibeVoice-Large-Q8""microsoft/VibeVoice-1.5B" 
     voices_map = None
     if args.voices_map is not None:
         voices_map = load_json(args.voices_map)
@@ -131,7 +131,7 @@ def parse_epub():
                                 print(f"Line {cobj.line_num} -> {line_to_character_map[cobj.line_num]} -> {line_to_voice_map[cobj.line_num]}")
                             cobj.set_speaker(line_to_voice_map[cobj.line_num])
                     else:
-                        print(f"Line {cobj.line_num} -> narrator even though this is a quote.", file=sys.stderr)
+                        print(f"Chapter {i} line {cobj.line_num} -> narrator even though this is a quote.", file=sys.stderr)
                         cobj.set_speaker(voices_map["narrator"])
                 else:
                     cobj.set_speaker(voices_map["narrator"])
@@ -208,7 +208,9 @@ def parse_epub():
                         cfg_scale=cfg_scale,
                         tokenizer=processor.tokenizer,
                         do_sample=False,
-                        verbose=False,
+                        verbose=False
+                        #use_exllama=True
+                        # use_external_llm=False
                     )
 
                     # Save output (processor handles device internally)
