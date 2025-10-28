@@ -137,7 +137,7 @@ def parse_epub():
                     cobj.set_speaker(voices_map["narrator"])
     # TODO: Give unique characters individual seed values to distringuish!
     #"large-v2"
-    short_text_postfix = " and they win everything"
+    short_text_postfix = " and also with you"
     postfix_detect_token = short_text_postfix.lower().strip().split(" ")[0]
     validation_model = whisperx.load_model("distil-medium.en", "cuda", compute_type="float16") # WhisperModel("tiny.en")
     # Re-initialize the processor for a new voice
@@ -180,8 +180,8 @@ def parse_epub():
                         continue
                 # TODO: for longer text, break up by ". " if possible. Can have fullscript actually be a list maybe?
                 full_script="Speaker 1: "+str(chapter_obj.text[0].upper()+chapter_obj.text[1:])
-                short_text_flag = len(chapter_obj.text) < 30
-                if short_text_flag:
+                short_text_flag = True#len(chapter_obj.text) < 30
+                if short_text_flag: # always enable as a test
                     full_script = full_script + short_text_postfix
                 ratio = 0.0
                 max_ratio = 0.0
@@ -247,8 +247,8 @@ def parse_epub():
                     pauses.append(0)
                     segments = [s["word"].lower() for s in result["word_segments"]]
                     scores = [s["score"] for s in result["word_segments"]]
-                    # start_times = [s["start"] for s in result["word_segments"]]
-                    end_times = [s["start"] for s in result["word_segments"]]
+                    start_times = [s["start"] for s in result["word_segments"]]
+                    end_times = [s["end"] for s in result["word_segments"]]
                     print(" ".join([color_word(word, score)+"#"*int(pause) for word, score, pause in zip(segments, scores, pauses)]))
                     detected_string = " ".join(segments).replace("?","").replace(".", "").replace("-","").replace(";","").replace(",","").replace("!","")
                     if short_text_flag:
@@ -262,12 +262,12 @@ def parse_epub():
                                 ratio = 0
                             else:
                                 postfix_start_index = segments[::-1].index(postfix_detect_token)
-                                # clip_end = start_times[::-1][postfix_start_index] - 0.100 # pad 100ms to ensure clean finsh 
-                                clip_end = end_times[::-1][postfix_start_index+1]
-                                print(f"POSTFIX DETECTED CLIPPING to {clip_end}")
+                                clip_end1 = start_times[::-1][postfix_start_index]
+                                clip_end2 = end_times[::-1][postfix_start_index+1]
+                                print(f"POSTFIX DETECTED CLIPPING to {clip_end1} - {clip_end2}")
                                 #Trim the clip to no longer include the postfix string.
                                 audio = pydub.AudioSegment.from_wav(f"./chapters/chapter_{str(i).zfill(2)}.{str(j).zfill(4)}.tmp.wav")
-                                trimmed_audio = audio[0:(clip_end*1000)]
+                                trimmed_audio = audio[0:((clip_end1+clip_end2)*500)]
                                 trimmed_audio.export(f"./chapters/chapter_{str(i).zfill(2)}.{str(j).zfill(4)}.tmp.wav", format="wav")
                         else:
                             print("POSTFIX UN-DETECTED -> Ratio 0")
