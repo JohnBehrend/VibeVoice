@@ -66,6 +66,8 @@ def color_word(word, score):
 
     color_code = f"\033[38;2;{red};{green};{blue}m"
     return f"{color_code}{word}{reset_code}"
+def distill_string(input):
+    return input.lower().replace("?","").replace(".", "").replace("-","").replace(";","").replace(",","").replace("!","")
 
 def parse_epub():
     parser = argparse.ArgumentParser(description="Parse an EPUB file into an array of chapters")
@@ -137,8 +139,8 @@ def parse_epub():
                     cobj.set_speaker(voices_map["narrator"])
     # TODO: Give unique characters individual seed values to distringuish!
     #"large-v2"
-    short_text_postfix = " and also with you"
-    postfix_detect_token = short_text_postfix.lower().strip().split(" ")[0]
+    short_text_postfix = "and also with you".lower()
+    postfix_detect_token = short_text_postfix.strip().split(" ")[0]
     validation_model = whisperx.load_model("distil-medium.en", "cuda", compute_type="float16") # WhisperModel("tiny.en")
     # Re-initialize the processor for a new voice
     tts_model = VibeVoiceForConditionalGenerationInference.from_pretrained(
@@ -149,7 +151,7 @@ def parse_epub():
     )
     tts_model.set_ddpm_inference_steps(num_steps=13)
     tts_model.eval()
-    cfg_scale=1.85
+    cfg_scale=1.40
     processor = VibeVoiceProcessor.from_pretrained(model_path)
     still_skip=True
     if args.alt_gpu or args.alt_order:
@@ -162,7 +164,7 @@ def parse_epub():
             if os.path.exists(f"./chapters/chapter_{str(i).zfill(2)}.mp3"):
                 print(f"Skipping chapter {str(i).zfill(2)}.",end="\r")
                 continue
-        voices_used = set([chapter_obj.get_speaker() for chapter_obj in chapter])
+        voices_used =list(dict.fromkeys([chapter_obj.get_speaker() for chapter_obj in chapter]).keys())
         for voice in voices_used:
             if args.resume:
                 already_generated = [int(x.split(".")[-2]) for x in glob.glob(f"./chapters/chapter_{str(i).zfill(2)}.*.wav" ) if not x.endswith(".tmp.wav")]
@@ -178,21 +180,20 @@ def parse_epub():
                     else:
                         print(f"Skipping chapter {str(i).zfill(2)}.{str(j).zfill(4)}", end="\r")
                         continue
-                # TODO: for longer text, break up by ". " if possible. Can have fullscript actually be a list maybe?
-                full_script="Speaker 1: "+str(chapter_obj.text[0].upper()+chapter_obj.text[1:])
+                full_script=str(chapter_obj.text[0].upper()+chapter_obj.text[1:])
                 short_text_flag = True#len(chapter_obj.text) < 30
                 if short_text_flag: # always enable as a test
-                    full_script = full_script + short_text_postfix
+                    full_script = full_script +" "+ short_text_postfix
                 ratio = 0.0
                 max_ratio = 0.0
                 retries = 0
-                input_string = chapter_obj.text.lower().replace("?","").replace(".", "").replace("-","").replace(";","").replace(",","").replace("!","")
+                input_string = distill_string(full_script)
                 print("INPUT:", input_string)
 
                 while ratio < 0.95 and retries < 10:
                     # Prepare inputs for the model
                     inputs = processor(
-                        text=[full_script], # Wrap in list for batch processing
+                        text=["Speaker 1: "+full_script], # Wrap in list for batch processing
                         voice_samples=[voice_mapper.get_voice_path(voice)],
                         padding=True,
                         return_tensors="pt",
@@ -245,19 +246,19 @@ def parse_epub():
                             pauses.append(segment["start"] - prev_end)
                         prev_end = segment["end"]
                     pauses.append(0)
-                    segments = [s["word"].lower() for s in result["word_segments"]]
+                    segments = [distill_string(s["word"]) for s in result["word_segments"]]
                     scores = [s["score"] for s in result["word_segments"]]
                     start_times = [s["start"] for s in result["word_segments"]]
                     end_times = [s["end"] for s in result["word_segments"]]
                     print(" ".join([color_word(word, score)+"#"*int(pause) for word, score, pause in zip(segments, scores, pauses)]))
-                    detected_string = " ".join(segments).replace("?","").replace(".", "").replace("-","").replace(";","").replace(",","").replace("!","")
-                    if short_text_flag:
-                        input_string = input_string + short_text_postfix.lower()
-                    ratio = SequenceMatcher((lambda c: c in [",",".","...",";"]), input_string, detected_string).ratio() # quick ratio doesn't care about oder just set match
+                    detected_string = " ".join(segments)
+                    # if short_text_flag:
+                    #     input_string = input_string + short_text_postfix
+                    ratio = SequenceMatcher(None, input_string, detected_string).ratio() # quick ratio doesn't care about oder just set match
                     print(str(j).zfill(4),", Attempt: ", retries+1, "Ratio: ", int(ratio*100),"Voice: ", voice)
                     if short_text_flag:
-                        if short_text_postfix.lower() in detected_string:
-                            if detected_string.startswith(short_text_postfix.lower()):
+                        if short_text_postfix in detected_string:
+                            if detected_string.startswith(short_text_postfix):
                                 print("POSTFIX DETECTED BUT ONLY POSTFIX! -> Ratio 0")
                                 ratio = 0
                             else:
