@@ -29,6 +29,7 @@ import pydub
 # Filter audio files
 from sidon_demo_app import denoise_speech
 from scipy.io import wavfile
+import pandas as pd
 
 # garbage collection
 import gc
@@ -68,6 +69,46 @@ def color_word(word, score):
     return f"{color_code}{word}{reset_code}"
 def distill_string(input):
     return input.lower().replace("?","").replace(".", "").replace("-","").replace(";","").replace(",","").replace("!","")
+
+def score_strings_pop(i_str, d_str, lookahead=5, postfix="and also with you"):
+    # Ensure lookahead is non-negative
+    lookahead = max(0, lookahead)
+    prev_undetected=False
+    results = []
+    input_tokens = i_str.split(" ")
+    detected_tokens = d_str.split(" ")
+    diff_list = []
+    for i, i_tok in enumerate(input_tokens):
+        if i_tok in diff_list:
+            detected=True
+            this_idx = diff_list.index(i_tok)
+            detected_tokens = diff_list[this_idx+1:] + detected_tokens 
+            diff_list = diff_list[:this_idx]            
+        else:
+            detected = False
+            if prev_undetected and len(diff_list)>0: # Just remove one token
+                diff_list.pop(0)
+            else:
+                diff_list = []  # Reset for each input token
+            
+            if detected_tokens:  # Only process if tokens remain
+                n = max(min(lookahead, len(detected_tokens)-len(diff_list)),0)  # Safe number of pops
+                for j in range(n):
+                    d_tok = detected_tokens.pop(0)
+                    diff_list.append(d_tok)
+                    # Check if current input token is in the popped tokens so far
+                    if i_tok in diff_list:
+                        detected = True
+                        break
+                if not detected:
+                    prev_undetected = True
+        
+        diff_str = " ".join(diff_list)  # Join current token's popped tokens
+        results.append((i, i_tok, diff_str, detected, " ".join(detected_tokens[:lookahead])))
+    df_temp = pd.DataFrame(results, columns=["i", "i_tok", "diff", "found", "next_tokens"])
+    last_valid_token_index = df_temp[df_temp["found"]==True]["i"].max()
+    last_valid_token = df_temp[df_temp["i"]==last_valid_token_index]["i_tok"]
+    return float(df_temp["found"].mean()) - 0.5 * (postfix not in d_str[-len(postfix):]), last_valid_token.values[0]
 
 def parse_epub():
     parser = argparse.ArgumentParser(description="Parse an EPUB file into an array of chapters")
@@ -151,7 +192,7 @@ def parse_epub():
     )
     tts_model.set_ddpm_inference_steps(num_steps=13)
     tts_model.eval()
-    cfg_scale=1.40
+    cfg_scale=1.90
     processor = VibeVoiceProcessor.from_pretrained(model_path)
     still_skip=True
     if args.alt_gpu or args.alt_order:
@@ -254,7 +295,8 @@ def parse_epub():
                     detected_string = " ".join(segments)
                     # if short_text_flag:
                     #     input_string = input_string + short_text_postfix
-                    ratio = SequenceMatcher(None, input_string, detected_string).ratio() # quick ratio doesn't care about oder just set match
+                    # ratio = SequenceMatcher(None, input_string, detected_string).ratio() # quick ratio doesn't care about oder just set match
+                    ratio, last_valid_token = score_strings_pop(input_string, detected_string, lookahead=5, postfix=short_text_postfix)
                     print(str(j).zfill(4),", Attempt: ", retries+1, "Ratio: ", int(ratio*100),"Voice: ", voice)
                     if short_text_flag:
                         if short_text_postfix in detected_string:
@@ -271,8 +313,13 @@ def parse_epub():
                                 trimmed_audio = audio[0:((clip_end1+clip_end2)*500)]
                                 trimmed_audio.export(f"./chapters/chapter_{str(i).zfill(2)}.{str(j).zfill(4)}.tmp.wav", format="wav")
                         else:
-                            print("POSTFIX UN-DETECTED -> Ratio 0")
-                            ratio = 0
+                            lastvalid_index = segments[::-1].index(last_valid_token)
+                            clip_end1 = end_times[::-1][lastvalid_index]
+                            print(f"POSTFIX UN-DETECTED LAST VALID CLIPPING TO {last_valid_token} {clip_end1} ")
+                            #Trim the clip to no longer include the postfix string.
+                            audio = pydub.AudioSegment.from_wav(f"./chapters/chapter_{str(i).zfill(2)}.{str(j).zfill(4)}.tmp.wav")
+                            trimmed_audio = audio[0:(clip_end1*1000)]
+                            trimmed_audio.export(f"./chapters/chapter_{str(i).zfill(2)}.{str(j).zfill(4)}.tmp.wav", format="wav")
                     # break
                     if ratio > max_ratio:
                         max_ratio = ratio
