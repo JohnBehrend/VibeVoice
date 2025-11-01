@@ -108,7 +108,10 @@ def score_strings_pop(i_str, d_str, lookahead=5, postfix="and also with you"):
     df_temp = pd.DataFrame(results, columns=["i", "i_tok", "diff", "found", "next_tokens"])
     last_valid_token_index = df_temp[df_temp["found"]==True]["i"].max()
     last_valid_token = df_temp[df_temp["i"]==last_valid_token_index]["i_tok"]
-    return float(df_temp["found"].mean()) - 0.5 * (postfix not in d_str[-len(postfix):]), last_valid_token.values[0]
+    if len(last_valid_token.values)==0:
+        return 0, input_tokens[-1]
+    else:
+        return float(df_temp["found"].mean()) - 0.5 * (postfix not in d_str[-len(postfix):]), last_valid_token.values[0]
 
 def parse_epub():
     parser = argparse.ArgumentParser(description="Parse an EPUB file into an array of chapters")
