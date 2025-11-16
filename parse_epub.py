@@ -34,6 +34,9 @@ import pandas as pd
 # garbage collection
 import gc
 
+# consistent seeding
+from transformers import set_seed
+
 def get_non_silent_audio_from_wavs(wav_filepath_list, min_silence_len=1250, silence_thresh=-60):
     """Remove silent audio from list of wave filepaths of wavs together. Return AudioSegement."""
     all_audio_segments = None
@@ -109,7 +112,7 @@ def score_strings_pop(i_str, d_str, lookahead=5, postfix="and also with you"):
     last_valid_token_index = df_temp[df_temp["found"]==True]["i"].max()
     last_valid_token = df_temp[df_temp["i"]==last_valid_token_index]["i_tok"]
     if len(last_valid_token.values)==0:
-        return 0, input_tokens[-1]
+        return 0, None
     else:
         return float(df_temp["found"].mean()) - 0.5 * (postfix not in d_str[-len(postfix):]), last_valid_token.values[0]
 
@@ -124,7 +127,7 @@ def parse_epub():
     parser.add_argument("--alt_order",action="store_true", help="Use same gpu but high chapters to low chapters for processing.")
     parser.add_argument("--verbose", action="store_true", help="Print verbose logging information")
     args = parser.parse_args()
-    
+    end_characters = ["?", ".", "-", ";", ",","!"]
     # Parse the EPUB file
     chapters = parse_epub_to_chapters(args.epub_file)
     
@@ -143,7 +146,7 @@ def parse_epub():
     else:
         target_device="cuda:0"
         torch.cuda.set_device(0)
-
+    cfg_scale=1.30
     model_path="Jmica/VibeVoice7B"#"tensorbanana/vibevoice-7b-no-llm-bf16"#"FabioSarracino/VibeVoice-Large-Q8""microsoft/VibeVoice-1.5B" 
     voices_map = None
     if args.voices_map is not None:
@@ -183,8 +186,8 @@ def parse_epub():
                     cobj.set_speaker(voices_map["narrator"])
     # TODO: Give unique characters individual seed values to distringuish!
     #"large-v2"
-    short_text_postfix = "and also with you".lower()
-    postfix_detect_token = short_text_postfix.strip().split(" ")[0]
+    short_text_postfix = "and also with you?".lower()
+    postfix_detect_token = distill_string(short_text_postfix.strip().split(" ")[0])
     validation_model = whisperx.load_model("distil-medium.en", "cuda", compute_type="float16") # WhisperModel("tiny.en")
     # Re-initialize the processor for a new voice
     tts_model = VibeVoiceForConditionalGenerationInference.from_pretrained(
@@ -195,7 +198,7 @@ def parse_epub():
     )
     tts_model.set_ddpm_inference_steps(num_steps=13)
     tts_model.eval()
-    cfg_scale=1.90
+
     processor = VibeVoiceProcessor.from_pretrained(model_path)
     still_skip=True
     if args.alt_gpu or args.alt_order:
@@ -227,17 +230,18 @@ def parse_epub():
                 full_script=str(chapter_obj.text[0].upper()+chapter_obj.text[1:])
                 short_text_flag = True#len(chapter_obj.text) < 30
                 if short_text_flag: # always enable as a test
-                    full_script = full_script +" "+ short_text_postfix
+                    full_script = full_script +(" " if full_script[0] in end_characters else ". ")+ short_text_postfix
                 ratio = 0.0
                 max_ratio = 0.0
                 retries = 0
                 input_string = distill_string(full_script)
                 print("INPUT:", input_string)
-
+                set_seed(42)
                 while ratio < 0.95 and retries < 10:
+                    set_seed(42+retries)
                     # Prepare inputs for the model
                     inputs = processor(
-                        text=["Speaker 1: "+full_script], # Wrap in list for batch processing
+                        text=["Speaker 1: ? "+full_script], # Wrap in list for batch processing
                         voice_samples=[voice_mapper.get_voice_path(voice)],
                         padding=True,
                         return_tensors="pt",
@@ -299,11 +303,13 @@ def parse_epub():
                     # if short_text_flag:
                     #     input_string = input_string + short_text_postfix
                     # ratio = SequenceMatcher(None, input_string, detected_string).ratio() # quick ratio doesn't care about oder just set match
-                    ratio, last_valid_token = score_strings_pop(input_string, detected_string, lookahead=5, postfix=short_text_postfix)
+                    ratio, last_valid_token = score_strings_pop(input_string, detected_string, lookahead=5, postfix=distill_string(short_text_postfix))
+                    # ratio, last_valid_token = score_and_clean_segements(input_string, segements, start_times, end_times, lookahead=5, postfix=short_text_postfix)
+                    
                     print(str(j).zfill(4),", Attempt: ", retries+1, "Ratio: ", int(ratio*100),"Voice: ", voice)
                     if short_text_flag:
-                        if short_text_postfix in detected_string:
-                            if detected_string.startswith(short_text_postfix):
+                        if (distill_string(short_text_postfix) in detected_string) and (postfix_detect_token in segments):
+                            if detected_string.startswith(distill_string(short_text_postfix)):
                                 print("POSTFIX DETECTED BUT ONLY POSTFIX! -> Ratio 0")
                                 ratio = 0
                             else:
@@ -316,13 +322,16 @@ def parse_epub():
                                 trimmed_audio = audio[0:((clip_end1+clip_end2)*500)]
                                 trimmed_audio.export(f"./chapters/chapter_{str(i).zfill(2)}.{str(j).zfill(4)}.tmp.wav", format="wav")
                         else:
-                            lastvalid_index = segments[::-1].index(last_valid_token)
-                            clip_end1 = end_times[::-1][lastvalid_index]
-                            print(f"POSTFIX UN-DETECTED LAST VALID CLIPPING TO {last_valid_token} {clip_end1} ")
-                            #Trim the clip to no longer include the postfix string.
-                            audio = pydub.AudioSegment.from_wav(f"./chapters/chapter_{str(i).zfill(2)}.{str(j).zfill(4)}.tmp.wav")
-                            trimmed_audio = audio[0:(clip_end1*1000)]
-                            trimmed_audio.export(f"./chapters/chapter_{str(i).zfill(2)}.{str(j).zfill(4)}.tmp.wav", format="wav")
+                            if last_valid_token is None:
+                                print("POSTFIX UN-DETECTED and INVALID VALUES. SKIP.")
+                            else:
+                                lastvalid_index = segments[::-1].index(last_valid_token)
+                                clip_end1 = end_times[::-1][lastvalid_index]
+                                print(f"POSTFIX UN-DETECTED LAST VALID CLIPPING TO {last_valid_token} {clip_end1} ")
+                                #Trim the clip to no longer include the postfix string.
+                                audio = pydub.AudioSegment.from_wav(f"./chapters/chapter_{str(i).zfill(2)}.{str(j).zfill(4)}.tmp.wav")
+                                trimmed_audio = audio[0:(clip_end1*1000)]
+                                trimmed_audio.export(f"./chapters/chapter_{str(i).zfill(2)}.{str(j).zfill(4)}.tmp.wav", format="wav")
                     # break
                     if ratio > max_ratio:
                         max_ratio = ratio
