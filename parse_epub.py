@@ -8,6 +8,7 @@ import sys
 import os
 import time
 import json
+import re
 
 from parse_chapter import parse_epub_to_chapters
 
@@ -228,6 +229,8 @@ def parse_epub():
                         print(f"Skipping chapter {str(i).zfill(2)}.{str(j).zfill(4)}", end="\r")
                         continue
                 full_script=str(chapter_obj.text[0].upper()+chapter_obj.text[1:])
+                # Fix halucination when " . . ." occurs
+                full_script = re.sub(r"(\s\.)+", r".", full_script)
                 short_text_flag = True#len(chapter_obj.text) < 30
                 if short_text_flag: # always enable as a test
                     full_script = full_script +(" " if full_script[0] in end_characters else ". ")+ short_text_postfix
@@ -237,7 +240,7 @@ def parse_epub():
                 input_string = distill_string(full_script)
                 print("INPUT:", input_string)
                 set_seed(42)
-                while ratio < 0.95 and retries < 10:
+                while ratio < 0.85 and retries < 5:
                     set_seed(42+retries)
                     # Prepare inputs for the model
                     inputs = processor(
