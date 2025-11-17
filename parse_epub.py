@@ -325,7 +325,7 @@ def parse_epub():
                                 trimmed_audio = audio[0:((clip_end1+clip_end2)*500)]
                                 trimmed_audio.export(f"./chapters/chapter_{str(i).zfill(2)}.{str(j).zfill(4)}.tmp.wav", format="wav")
                         else:
-                            if last_valid_token is None:
+                            if ((last_valid_token is None) or (last_valid_token == "")):
                                 print("POSTFIX UN-DETECTED and INVALID VALUES. SKIP.")
                             else:
                                 lastvalid_index = segments[::-1].index(last_valid_token)
