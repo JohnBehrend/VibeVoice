@@ -196,8 +196,12 @@ if __name__ == "__main__":
                     messages=messages,
                     temperature=0.7,
                     #stream=True # Set to True for streaming responses
-                ).choices[0].message.content
-                thought_process, result = response.split("</think>")
+                ).choices[0].message
+                if "</think>" in response.content:
+                    thought_process, result = response.content.split("</think>")
+                else:
+                    result = response.content
+                    thought_process = response.reasoning
                 # Save think files
                 with open(chapter_file_base+f".think.{a}.txt", "w", encoding='utf-8') as f:
                     f.write(thought_process)
