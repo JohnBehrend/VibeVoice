@@ -38,6 +38,40 @@ def add_quotes_around_keys(json_body):
     revised_json_body = "{"+", ".join(entries)+"}"
     # print(revised_json_body)
     return revised_json_body
+def interpret_new_result(result, attempt_num):
+    """Process result of new LLM query of the following format:
+    {
+  "speaker_map": {
+    "1": "narrator",
+    "2": "First character",
+    "3": "Second Character",
+  },
+  "attributions": {
+    "7": 2,
+    "9": 2,
+    "11": 2,
+    "13": 3,
+    "15": 3
+  }
+  -----
+      return character_map, line_map
+    """
+    line_map = {}
+    char_map = {}
+    # load after stripping out comments
+    json_result = json.loads("\n".join([x for x in result if not x.startswith("```")]))                
+    # convert keys to int
+    char_map = {int(k): v for k,v in json_result["speaker_map"].items()}
+    # remove line_map entries that are invalid.
+    for line_num_str, char_num in json_result["attributions"].items():
+        if char_num in char_map.keys():
+            if "-" in line_num_str:
+                start, end = line_num_str.split("-")
+                for line in range(int(start), int(end), 1):
+                    line_map[line] = char_num
+            else:
+                line_map[int(line_num_str)] = char_num
+    return char_map, line_map 
 
 def interpret_result(result, attempt_num):
     """Process result of a LLM query of the following format:
@@ -123,7 +157,7 @@ def merge_line_maps(line_maps, verbose=False):
         print(merged_line_map)
     return { k: Counter(v).most_common(1)[0][0] for k,v in merged_line_map.items()}
     
-PROMPT_TXT = """
+OLD_PROMPT_TXT = """
 Prompt: Audiobook Dialogue Annotation Expert
 
 You are an expert in audiobook dialogue annotation. Your task is to identify all speakers in a given chapter and provide detailed attribution for each quoted line.
@@ -169,6 +203,41 @@ IMPORTANT:
 - TAKE YOUR TIME AND PROCESS ALL QUOTED LINES INDIVIDUALLY.
 - Report every line with a quote. There will be many times where thinking will have a range of lines. We need to process each quoted line and print the speaker for each line.
 """
+PROMPT_TXT = """
+# Role: Provide detailed character attribution annotations for dialogues within audiobook chapters.
+## Goals
+- Identify all speakers in a chapter, including the narrator, and provide detailed character attribution labels for each citation line.
+## Constraints
+- All speakers must be identified and numbered, with the narrator numbered 1.
+- Quoted lines must begin and end with double quotes on the SAME physical line.
+- You MUST capture and attribute EVERY line that starts with " and ends with " — even if the quote is very short (e.g. "No." or "Yes, Master.") OR very long.
+- Skipping even one correctly-quoted line is unacceptable. Double-check at the end that nothing was missed.
+- NEVER use ranges (82-83, 100-102, etc.). Every quoted line gets its own explicit line number.
+- Determine the speaker based on the context of the narrative.
+- Ensure that the dialogue flows logically within the continuous text.
+## Skills
+- Accurately identify all speakers in the text.
+- Accurately identify the speaker of each quoted line.
+- Navigate contextual ambiguity with deep analysis.
+## Output format (exactly this, no extra text)
+{
+  "speaker_map": {"1": "narrator", "2": "Name", "3": "OtherName"},
+  "attributions": {
+    "7": 2,
+    "9": 2,
+    ...
+  }
+}
+## Workflow
+1. Scan the text line by line and identify every line that both begins and ends with ".
+2. The speaker for each such line is determined based on context.
+3. After finishing, verify again that no qualifying line was missed.
+4. Output the speaker map in proper JSON format. Simplify the names of the speakers.
+5. Output the attributions exactly as shown - one explicit key per quoted line, no ranges, no comments.
+
+Begin processing the chapter now.
+"""
+
 #- Do NOT base attribution solely on the quote content itself
 #- Print with final format in mind.
 #- Do not stop until the full text is processed!
@@ -179,6 +248,7 @@ if __name__ == "__main__":
     parser.add_argument("--verbose", action="store_true", help="Enable verbose printing for debug.")
     parser.add_argument("--skip_llm", action="store_true", help="Skip call to LLM and just try to process files into character maps.")
     parser.add_argument("-num_llm_attempts", type=int, default=5, help="Number of llm attempts submitted.")
+    parser.add_argument("--old_format", action="store_true", help="Use older format for LLM query and parsing.")
     args = parser.parse_args()
     client = OpenAI(base_url="http://localhost:1234/v1", api_key="lm-studio") # api_key can be any string as it's not used by LM Studio
     
@@ -192,8 +262,12 @@ if __name__ == "__main__":
         with open(args.txt_file,"r",  encoding='utf-8') as f:
             lines = f.readlines()
         # Define your chat messages
-        messages = [
-            {"role": "system", "content": "You are a helpful assistant."+PROMPT_TXT}]
+        if args.old_format:
+            messages = [
+                {"role": "system", "content": "You are a helpful assistant."+OLD_PROMPT_TXT}]
+        else:
+            messages = [
+                {"role": "system", "content": PROMPT_TXT}]
         [messages.append({"role": "user", "content": x}) for x in lines]
 
         for a, attempt in enumerate(range(args.num_llm_attempts)):
@@ -224,10 +298,14 @@ if __name__ == "__main__":
     line_maps = []
     merged_character_map = {}
     for a, attempt in enumerate(range(args.num_llm_attempts)):
-        with open(chapter_file_base+f".result.{a}.txt", "r", encoding='utf-8') as f:
-            result = f.readlines()
         try:
-            character_map, line_map = interpret_result(result, a)
+            with open(chapter_file_base+f".result.{a}.txt", "r", encoding='utf-8') as f:
+                result = f.readlines()
+            if args.old_format:
+                character_map, line_map = interpret_result(result, a)
+            else:
+                character_map, line_map = interpret_new_result(result, a)
+                print(character_map)
         except Exception as e:
             print(f"Error in {chapter_file_base}.result.{a}.txt")
             raise e
