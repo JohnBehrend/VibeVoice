@@ -14,7 +14,7 @@ from openai import OpenAI
 
 # MODEL_PATH = "D:/models/unsloth/GLM-4.5-Air-GGUF"#"D:/models/lmstudio-community/gpt-oss-20b-GGUF"
 # MODEL_GGUF = "GLM-4.5-Air-Q4_K_S-00001-of-00002.gguf"#"gpt-oss-20b-MXFP4.gguf"
-#""
+#""#
 #"D:/models/unsloth/GLM-4.5-Air-GGUF"#/#"unsloth/glm-4.5-air-q4"#"unsloth/GLM-4.5-Air-GGUF"#"zai-org/GLM-4.5"
 # /opt/model-storage/GLM-4.5-Air-UD-Q4_K_XL-00001-of-00002.gguf
 
@@ -156,6 +156,41 @@ def merge_line_maps(line_maps, verbose=False):
         print("Merged Line Map:")
         print(merged_line_map)
     return { k: Counter(v).most_common(1)[0][0] for k,v in merged_line_map.items()}
+
+def is_same_character_by_line_mapping(character_key, line_map, other_line_maps):
+    """
+    Determine if two characters are actually the same based on their line mappings.
+    Returns True if at least half of the lines in the current character's map
+    go to the same speaker as the existing character.
+    """
+    # Get all lines for both characters
+    current_char_lines = [line for line, char_key in line_map.items() 
+                         if char_key == character_key]
+    
+    # Check how many of these lines map to the other_character_key in merged_line_map
+    matching_lines = 0
+    total_lines_to_check = len(current_char_lines)
+    
+    if total_lines_to_check == 0:
+        return False
+    
+    for other_line_map in other_line_maps:
+        for line in current_char_lines:
+            # TODO: Fix this code to actually navigate each prior map and see if any of the other results match a bunch.
+        
+            matching_lines += 1
+    
+    # Return True if at least half of the lines match
+    threshold = total_lines_to_check / 2
+    return matching_lines >= threshold
+
+def compare_characters(character_name, other_character):
+    """Check if two characters are likely the same based on name similarity."""
+    if (character_name == other_character) or \
+       (character_name in other_character) or \
+       (other_character in character_name):
+        return True
+    return False
     
 OLD_PROMPT_TXT = """
 Prompt: Audiobook Dialogue Annotation Expert
@@ -275,7 +310,7 @@ if __name__ == "__main__":
             try:
                 print(f"Processing attempt {a}")
                 response = client.chat.completions.create(
-                    model="local-model",  # Use a placeholder model name or the specific model ID from LM Studio
+                    model="local-model",  # Use a placeholder model name or the specific ID from LM Studio
                     messages=messages,
                     temperature=0.7,
                     #stream=True # Set to True for streaming responses
@@ -327,9 +362,7 @@ if __name__ == "__main__":
             for key, character in character_map.items():
                 existing_character=False
                 for m_key, m_character in merged_character_map.items():
-                    if (character == m_character) or \
-                       (character in m_character) or \
-                       (m_character in character):
+                    if compare_characters(character, m_character):
                         existing_character=True
                         key_remap[key] = m_key
                         if key == m_key:
@@ -339,6 +372,8 @@ if __name__ == "__main__":
                 if not existing_character:
                     character_is_used = character in line_map.values()
                     if character_is_used:
+                        # check to see if we align to an existing character in prior run based on the lines spoken.
+
                         new_m_key = max(merged_character_map.keys())+1
                         merged_character_map[new_m_key] = character
                         key_remap[new_m_key]=new_m_key
