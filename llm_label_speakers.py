@@ -53,12 +53,13 @@ char_map : {"1": "narrator", "2": "First Character", "3": "Second Character"}
     line_map = {}
     char_map = {}
     IN_CHARMAP = False
+    MISSING_OPEN = False
     for line in result:
         if len(char_map) > 0:
-            if ":" in line and not (line.startswith("#")):
+            if ":" in line and not (line.startswith("#") or line.startswith("`") or line.startswith("*")):
                 try:
                     this_line, speaker_num = line.split(":")
-                    this_line = this_line.replace("Line ","").replace("Lines ","")
+                    this_line = this_line.replace("Line ","").replace("Lines ","").replace("- ", "")
                     if "-" in this_line:
                         line_start, line_stop = this_line.split("-")
                         for x in range(int(line_start),int(line_stop)+1):
@@ -68,7 +69,12 @@ char_map : {"1": "narrator", "2": "First Character", "3": "Second Character"}
                 except:
                     print(f"INVALID SPEAKER FORMAT FROM LLM RUN {attempt_num}: {line}", file=sys.stderr)
         elif IN_CHARMAP:
-            json_body = json_body+line.strip()
+            if MISSING_OPEN:
+                if "{" in line:
+                    MISSING_OPEN=False
+                    json_body = line.strip()
+            else:
+                json_body = json_body+line.strip()
             if "}" in line:
                 IN_CHARMAP=False
                 print("TRYING MULTLINE CHARMAP:", json_body)
@@ -86,9 +92,12 @@ char_map : {"1": "narrator", "2": "First Character", "3": "Second Character"}
             elif ("char_map" in line) and ("{" in line):
                 IN_CHARMAP=True
                 json_body = "{"
+            elif "char_map" in line:
+                IN_CHARMAP=True
+                MISSING_OPEN=True
             # could eventually add a check for """json""" with unquoted keys.
     for k in char_map.keys():
-        char_map[k] = (char_map[k].split("/")[0]).lower()
+        char_map[k] = (char_map[k].split("/")[0]).split(" (")[0].lower().strip().replace("‑","")
     # convert keys to int
     char_map = {int(k): v for k,v in char_map.items()}
     # remove line_map entries that are invalid.
