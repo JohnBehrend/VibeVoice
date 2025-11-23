@@ -61,7 +61,7 @@ def interpret_new_result(result, attempt_num):
     # load after stripping out comments
     json_result = json.loads("\n".join([x for x in result if not x.startswith("```")]))                
     # convert keys to int
-    char_map = {int(k): v for k,v in json_result["speaker_map"].items()}
+    char_map = {int(k): v.lower().strip() for k,v in json_result["speaker_map"].items()}
     # remove line_map entries that are invalid.
     for line_num_str, char_num in json_result["attributions"].items():
         if char_num in char_map.keys():
@@ -132,6 +132,7 @@ char_map : {"1": "narrator", "2": "First Character", "3": "Second Character"}
             # could eventually add a check for """json""" with unquoted keys.
     for k in char_map.keys():
         char_map[k] = (char_map[k].split("/")[0]).split(" (")[0].lower().strip().replace("‑","")
+    char_map = {k.lower().strip() : v for k,v in char_map.items()}
     # convert keys to int
     char_map = {int(k): v for k,v in char_map.items()}
     # remove line_map entries that are invalid.
@@ -174,7 +175,7 @@ def is_same_character_by_line_mapping(character_key, line_map, merged_character_
     if total_lines_to_check == 0:
         return False, None
     unique_speakers = list(set(merged_character_map.values()))
-    print(f"checking for for {character_key} as alternateve name for one of these: {unique_speakers}")
+    print(f"checking for for '{character_key}' as alternateve name for one of these: {unique_speakers}")
     for unique_speaker in unique_speakers:
         matching_lines = 0
         for line in current_char_lines:
@@ -375,32 +376,33 @@ if __name__ == "__main__":
                         existing_character=True
                         key_remap[key] = m_key
                         if key == m_key:
-                            print(f"Already matched character with same key: [{key}] {character}") 
+                            print(f"Matched character with same key: [{key}] {character}->{m_character}") 
                         else:
-                            print(f"Matched character with different key: [{key}->{m_key}] {character}")
+                            print(f"Matched character with different key: [{key}->{m_key}] {character}->{m_character}")
                 if not existing_character:
-                    character_is_used = character in line_map.values()
+                    character_is_used = key in line_map.values()
                     if character_is_used:
                         # check to see if we align to an existing character in prior run based on the lines spoken.
-
-                        new_m_key = max(merged_character_map.keys())+1
-                        merged_character_map[new_m_key] = character
-                        key_remap[new_m_key]=new_m_key
-                        print(f"New character with new key: [{new_m_key}]{character}")
-                        # TODO: remap speakers to the new character
-                    else:
-                        found_match, character_matched = is_same_character_by_line_mapping(character, character_map, merged_character_map)
+                        found_match, m_character = is_same_character_by_line_mapping(character, character_map, merged_character_map)
                         if found_match:
-                            if character_matched in alternate_names.keys():
-                                print(f"Found another alternate name for '{character_matched}' : '{character}'.")
-                                alternate_names[character_matched].append(character)
-                            else:
-                                 print(f"Found alternate name for '{character_matched}' : '{character}'.")
-                                 alternate_names[character_matched] = [character]
+                            # set m_key to first key in merged_character_map with m_character as the value.
+                            m_key = next((k for k,v in merged_character_map.items() if v == m_character), None)
                             key_remap[key] = m_key
+                            if key==m_key:
+                                print(f"Alternate character with same key: [{key}->{m_key}] {character}->{m_character}.")
+                            else:
+                                print(f"Alternate character with different key: [{key}->{m_key}] {character}->{m_character}.")
+                            if m_character in alternate_names.keys():
+                                alternate_names[m_character].append(character)
+                            else:
+                                 alternate_names[m_character] = [character]
                         else:
-                            print(f"Unused character {character}, will not be added.")
-
+                            new_m_key = max(merged_character_map.keys())+1
+                            merged_character_map[new_m_key] = character
+                            key_remap[new_m_key]=new_m_key
+                            print(f"New character with new key: [{new_m_key}] {character}")                            
+                    else:
+                        print(f"Unused character '{character}', will not be added.")
             # use key_remap on line_map
             print(key_remap)
             line_map = {k:key_remap[v] for k,v in line_map.items() if v in key_remap.keys()}
