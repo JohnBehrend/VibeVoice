@@ -157,7 +157,7 @@ def merge_line_maps(line_maps, verbose=False):
         print(merged_line_map)
     return { k: Counter(v).most_common(1)[0][0] for k,v in merged_line_map.items()}
 
-def is_same_character_by_line_mapping(character_key, line_map, other_line_maps):
+def is_same_character_by_line_mapping(character_key, line_map, merged_character_map):
     """
     Determine if two characters are actually the same based on their line mappings.
     Returns True if at least half of the lines in the current character's map
@@ -172,25 +172,33 @@ def is_same_character_by_line_mapping(character_key, line_map, other_line_maps):
     total_lines_to_check = len(current_char_lines)
     
     if total_lines_to_check == 0:
-        return False
-    
-    for other_line_map in other_line_maps:
+        return False, None
+    unique_speakers = list(set(merged_character_map.values()))
+    print(f"checking for for {character_key} as alternateve name for one of these: {unique_speakers}")
+    for unique_speaker in unique_speakers:
+        matching_lines = 0
         for line in current_char_lines:
-            # TODO: Fix this code to actually navigate each prior map and see if any of the other results match a bunch.
-        
-            matching_lines += 1
-    
-    # Return True if at least half of the lines match
-    threshold = total_lines_to_check / 2
-    return matching_lines >= threshold
+            if line in merged_character_map.keys():
+                if merged_character_map[line] == unique_speaker:
+                    matching_lines += 1
+        if matching_lines >= total_lines_to_check / 2:
+            return True, unique_speaker
+    return False, None
 
-def compare_characters(character_name, other_character):
+def compare_characters(character_name, other_character, alternative_names):
     """Check if two characters are likely the same based on name similarity."""
     if (character_name == other_character) or \
        (character_name in other_character) or \
        (other_character in character_name):
         return True
-    return False
+    elif other_character in alternative_names.keys():
+        if any([x==character_name for x in alternate_names[other_character]]):
+            print(f"'{character_name}' in alterantive_names[{other_character}].")
+            return True
+        else:
+            return False
+    else:
+        return False
     
 OLD_PROMPT_TXT = """
 Prompt: Audiobook Dialogue Annotation Expert
@@ -332,6 +340,7 @@ if __name__ == "__main__":
     character_maps = []
     line_maps = []
     merged_character_map = {}
+    alternate_names = {}
     for a, attempt in enumerate(range(args.num_llm_attempts)):
         try:
             with open(chapter_file_base+f".result.{a}.txt", "r", encoding='utf-8') as f:
@@ -362,7 +371,7 @@ if __name__ == "__main__":
             for key, character in character_map.items():
                 existing_character=False
                 for m_key, m_character in merged_character_map.items():
-                    if compare_characters(character, m_character):
+                    if compare_characters(character, m_character, alternate_names):
                         existing_character=True
                         key_remap[key] = m_key
                         if key == m_key:
@@ -380,16 +389,23 @@ if __name__ == "__main__":
                         print(f"New character with new key: [{new_m_key}]{character}")
                         # TODO: remap speakers to the new character
                     else:
-                        print(f"Unused character {character}, will not be added.")
+                        found_match, character_matched = is_same_character_by_line_mapping(character, character_map, merged_character_map)
+                        if found_match:
+                            if character_matched in alternate_names.keys():
+                                print(f"Found another alternate name for '{character_matched}' : '{character}'.")
+                                alternate_names[character_matched].append(character)
+                            else:
+                                 print(f"Found alternate name for '{character_matched}' : '{character}'.")
+                                 alternate_names[character_matched] = [character]
+                            key_remap[key] = m_key
+                        else:
+                            print(f"Unused character {character}, will not be added.")
+
             # use key_remap on line_map
             print(key_remap)
-            # print("PRE linemap")
-            # print(line_map)
             line_map = {k:key_remap[v] for k,v in line_map.items() if v in key_remap.keys()}
-            # print("POST linemap")
-            # print(line_map)
         line_maps.append(line_map)
-    # quit() # just merging together the maps for now, don't overwrite maps.
+    print("Alternate names", alternate_names)
     if args.verbose:
         print(merged_character_map)
         print("line_maps:", len(line_maps))
