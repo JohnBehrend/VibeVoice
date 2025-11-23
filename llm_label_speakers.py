@@ -179,7 +179,7 @@ def is_same_character_by_line_mapping(character_key, character, line_map, merged
         to_match_lines = [line for line, key in merged_line_map.items() if key == unique_speaker_key ]
         matching_lines = set(to_match_lines).intersection(set(current_char_lines))
         # check if we have match
-        if  len(matching_lines) >= total_lines_to_check/2:
+        if  len(matching_lines) > total_lines_to_check/2:
             print(f"Found '{character}' as alternative name for '{merged_character_map[unique_speaker_key]}' matching lines [{len(matching_lines)} / {total_lines_to_check}]")
             return True, unique_speaker_key
     return False, None
