@@ -157,8 +157,8 @@ def merge_line_maps(line_maps, verbose=False):
         print("Merged Line Map:")
         print(merged_line_map)
     return { k: Counter(v).most_common(1)[0][0] for k,v in merged_line_map.items()}
-
-def is_same_character_by_line_mapping(character_key, line_map, merged_character_map):
+#(key, character, line_map, merged_character_map, merge_line_maps(line_maps, args.verbose))
+def is_same_character_by_line_mapping(character_key, character, line_map, merged_character_map, merged_line_map):
     """
     Determine if two characters are actually the same based on their line mappings.
     Returns True if at least half of the lines in the current character's map
@@ -174,16 +174,14 @@ def is_same_character_by_line_mapping(character_key, line_map, merged_character_
     
     if total_lines_to_check == 0:
         return False, None
-    unique_speakers = list(set(merged_character_map.values()))
-    print(f"checking for for '{character_key}' as alternateve name for one of these: {unique_speakers}")
-    for unique_speaker in unique_speakers:
-        matching_lines = 0
-        for line in current_char_lines:
-            if line in merged_character_map.keys():
-                if merged_character_map[line] == unique_speaker:
-                    matching_lines += 1
-        if matching_lines >= total_lines_to_check / 2:
-            return True, unique_speaker
+    unique_speaker_keys = merged_character_map.keys()
+    for unique_speaker_key in unique_speaker_keys:
+        to_match_lines = [line for line, key in merged_line_map.items() if key == unique_speaker_key ]
+        matching_lines = set(to_match_lines).intersection(set(current_char_lines))
+        # check if we have match
+        if  len(matching_lines) >= total_lines_to_check/2:
+            print(f"Found '{character}' as alternative name for '{merged_character_map[unique_speaker_key]}' matching lines [{len(matching_lines)} / {total_lines_to_check}]")
+            return True, unique_speaker_key
     return False, None
 
 def compare_characters(character_name, other_character, alternative_names):
@@ -383,10 +381,9 @@ if __name__ == "__main__":
                     character_is_used = key in line_map.values()
                     if character_is_used:
                         # check to see if we align to an existing character in prior run based on the lines spoken.
-                        found_match, m_character = is_same_character_by_line_mapping(character, character_map, merged_character_map)
+                        found_match, m_key = is_same_character_by_line_mapping(key, character, line_map, merged_character_map, merge_line_maps(line_maps, args.verbose))
                         if found_match:
-                            # set m_key to first key in merged_character_map with m_character as the value.
-                            m_key = next((k for k,v in merged_character_map.items() if v == m_character), None)
+                            m_character = merged_character_map[m_key]
                             key_remap[key] = m_key
                             if key==m_key:
                                 print(f"Alternate character with same key: [{key}->{m_key}] {character}->{m_character}.")
