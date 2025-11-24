@@ -81,7 +81,7 @@ def interpret_new_result(result, attempt_num):
             print(f"Removing duplicate {idx}: {char}")
             line_map = {k: valid_characters[char] if (v==idx) else v for k,v in line_map.items() }
     # remove unused characters
-    used_char_indexes = list(set(line_map.values()))
+    used_char_indexes = [1]+list(set(line_map.values())) # 1 added for narrator
     char_map = {k:v for k,v in char_map.items() if k in used_char_indexes}
     return char_map, line_map 
 
@@ -377,20 +377,23 @@ if __name__ == "__main__":
                 existing_character=False
                 for m_key, m_character in merged_character_map.items():
                     if compare_characters(character, m_character):
-                       existing_character=True
+                        existing_character=True
+                        key_remap[key] = m_key
+                        if key == m_key:
+                            print(f"Matched character with same key: [{key}] {character}->{m_character}") 
+                        else:
+                            print(f"Matched character with different key: [{key}->{m_key}] {character}->{m_character}")
                     elif m_character in alternate_names.keys():
                         # alternative name for same character
                         for i, (alt_character, alt_count) in enumerate(alternate_names[m_character]):
                             if character == alt_character:
-                                print(f"'{character}' in alterantive_names[{m_character}].")
                                 existing_character=True
                                 alternate_names[m_character][i] = (alt_character, alt_count+1)
-                if existing_character:
-                    key_remap[key] = m_key
-                    if key == m_key:
-                        print(f"Matched character with same key: [{key}] {character}->{m_character}") 
-                    else:
-                        print(f"Matched character with different key: [{key}->{m_key}] {character}->{m_character}")
+                                key_remap[key] = m_key
+                                if key == m_key:
+                                    print(f"Matched alt_char with same key: [{key}] {character}->{m_character}") 
+                                else:
+                                    print(f"Matched alt_char with different key: [{key}->{m_key}] {character}->{m_character}")
                 if not existing_character:
                     character_is_used = key in line_map.values()
                     if character_is_used:
