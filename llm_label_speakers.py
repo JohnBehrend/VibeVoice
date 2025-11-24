@@ -184,18 +184,12 @@ def is_same_character_by_line_mapping(character_key, character, line_map, merged
             return True, unique_speaker_key
     return False, None
 
-def compare_characters(character_name, other_character, alternative_names):
+def compare_characters(character_name, other_character):
     """Check if two characters are likely the same based on name similarity."""
     if (character_name == other_character) or \
        (character_name in other_character) or \
        (other_character in character_name):
         return True
-    elif other_character in alternative_names.keys():
-        if any([x==character_name for x in alternate_names[other_character]]):
-            print(f"'{character_name}' in alterantive_names[{other_character}].")
-            return True
-        else:
-            return False
     else:
         return False
     
@@ -370,13 +364,21 @@ if __name__ == "__main__":
             for key, character in character_map.items():
                 existing_character=False
                 for m_key, m_character in merged_character_map.items():
-                    if compare_characters(character, m_character, alternate_names):
-                        existing_character=True
-                        key_remap[key] = m_key
-                        if key == m_key:
-                            print(f"Matched character with same key: [{key}] {character}->{m_character}") 
-                        else:
-                            print(f"Matched character with different key: [{key}->{m_key}] {character}->{m_character}")
+                    if compare_characters(character, m_character):
+                       existing_character=True
+                    elif m_character in alternate_names.keys():
+                        # alternative name for same character
+                        for i, (alt_character, alt_count) in enumerate(alternate_names[m_character]):
+                            if character == alt_character:
+                                print(f"'{character}' in alterantive_names[{m_character}].")
+                                existing_character=True
+                                alternate_names[m_character][i] = (alt_character, alt_count+1)
+                if existing_character:
+                    key_remap[key] = m_key
+                    if key == m_key:
+                        print(f"Matched character with same key: [{key}] {character}->{m_character}") 
+                    else:
+                        print(f"Matched character with different key: [{key}->{m_key}] {character}->{m_character}")
                 if not existing_character:
                     character_is_used = key in line_map.values()
                     if character_is_used:
@@ -390,9 +392,9 @@ if __name__ == "__main__":
                             else:
                                 print(f"Alternate character with different key: [{key}->{m_key}] {character}->{m_character}.")
                             if m_character in alternate_names.keys():
-                                alternate_names[m_character].append(character)
+                                alternate_names[m_character].append((character,1))
                             else:
-                                 alternate_names[m_character] = [character]
+                                alternate_names[m_character] = [(character,1)]
                         else:
                             new_m_key = max(merged_character_map.keys())+1
                             merged_character_map[new_m_key] = character
