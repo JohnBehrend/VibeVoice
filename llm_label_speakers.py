@@ -61,7 +61,7 @@ def interpret_new_result(result, attempt_num):
     # load after stripping out comments
     json_result = json.loads("\n".join([x for x in result if not x.startswith("```")]))                
     # convert keys to int
-    char_map = {int(k): v.lower().strip() for k,v in json_result["speaker_map"].items()}
+    char_map = {int(k): v.lower().strip().replace("_"," ").replace("'","").split("/")[0].split(" (")[0] for k,v in json_result["speaker_map"].items()}
     # remove line_map entries that are invalid.
     for line_num_str, char_num in json_result["attributions"].items():
         if char_num in char_map.keys():
