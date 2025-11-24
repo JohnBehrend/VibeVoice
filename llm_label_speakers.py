@@ -71,6 +71,18 @@ def interpret_new_result(result, attempt_num):
                     line_map[line] = char_num
             else:
                 line_map[int(line_num_str)] = char_num
+    # merge same name indexes
+    valid_characters = {}
+    for idx, char in char_map.items():
+        if char not in valid_characters.keys():
+            valid_characters[char] = idx
+        else:
+            # replace duplicates in line_map
+            print(f"Removing duplicate {idx}: {char}")
+            line_map = {k: valid_characters[char] if (v==idx) else v for k,v in line_map.items() }
+    # remove unused characters
+    used_char_indexes = list(set(line_map.values()))
+    char_map = {k:v for k,v in char_map.items() if k in used_char_indexes}
     return char_map, line_map 
 
 def interpret_result(result, attempt_num):
