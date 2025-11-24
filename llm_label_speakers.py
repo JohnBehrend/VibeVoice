@@ -422,6 +422,13 @@ if __name__ == "__main__":
             line_map = {k:key_remap[v] for k,v in line_map.items() if v in key_remap.keys()}
         line_maps.append(line_map)
     print("Alternate names", alternate_names)
+    for alt_name, alt_map in alternate_names.items():
+        for other_name, other_count in alt_map:
+            if other_count >= (args.num_llm_attempts / 2):
+                orig_index = next((k for k, v in merged_character_map.items() if v == alt_name), None)
+                if orig_index is not None:
+                    print(f"Remapping index {orig_index} : '{alt_name}'->'{other_name}' [{other_count}/{args.num_llm_attempts}]")
+                    merged_character_map[orig_index] = other_name                
     if args.verbose:
         print(merged_character_map)
         print("line_maps:", len(line_maps))
