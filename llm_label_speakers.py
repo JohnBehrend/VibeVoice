@@ -285,6 +285,7 @@ PROMPT_TXT = """
 
 Begin processing the chapter now.
 """
+#TODO: Update prompt to ensre we give non numbered, first name driven naming for characters...And narrator for occasions where it is too difficult to determine.
 
 #- Do NOT base attribution solely on the quote content itself
 #- Print with final format in mind.

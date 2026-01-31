@@ -171,7 +171,7 @@ def parse_epub():
             if all(x in voices_map.keys() for x in line_to_character_map.values()):
                 line_to_voice_map = {k: voices_map[v] for k,v in line_to_character_map.items()}
             else:
-                print("Please fill in the following characters in the voices map:")
+                print(f"Please fill in the following characters in the voices map from chapter {i}:")
                 print(json.dumps({v: "" for k,v in line_to_character_map.items() if v not in voices_map.keys()}, indent=4))
                 exit()
             for cobj in chapter:
@@ -318,7 +318,10 @@ def parse_epub():
                             else:
                                 postfix_start_index = segments[::-1].index(postfix_detect_token)
                                 clip_end1 = start_times[::-1][postfix_start_index]
-                                clip_end2 = end_times[::-1][postfix_start_index+1]
+                                if len(end_times) > postfix_start_index+1:
+                                    clip_end2 = end_times[::-1][postfix_start_index+1]
+                                else:
+                                    clip_end2 = end_times[-1]
                                 print(f"POSTFIX DETECTED CLIPPING to {clip_end1} - {clip_end2}")
                                 #Trim the clip to no longer include the postfix string.
                                 audio = pydub.AudioSegment.from_wav(f"./chapters/chapter_{str(i).zfill(2)}.{str(j).zfill(4)}.tmp.wav")
